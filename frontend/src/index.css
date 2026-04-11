@@ -1,0 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Cabinet+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --teal:   #0ABFBC;
+  --coral:  #FC5C7D;
+  --amber:  #F7B731;
+  --violet: #7B5EA7;
+  --mint:   #11998E;
+  --sky:    #38B2F4;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Cabinet Grotesk', sans-serif;
+  background: #F8FAFB;
+  color: #1A2332;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-display { font-family: 'Clash Display', sans-serif; }
+.font-mono    { font-family: 'JetBrains Mono', monospace; }
+
+/* Scrollbar */
+::-webkit-scrollbar        { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: #F1F5F9; }
+::-webkit-scrollbar-thumb  { background: #CBD5E1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+/* Page transitions */
+.page-enter        { opacity: 0; transform: translateY(16px); }
+.page-enter-active { opacity: 1; transform: translateY(0); transition: all 0.4s ease; }
+
+/* Progress bar */
+.progress-bar {
+  height: 6px; border-radius: 3px; overflow: hidden;
+  background: #E2EBF0;
+}
+.progress-fill {
+  height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--teal), var(--mint));
+  transition: width 0.5s ease;
+}
