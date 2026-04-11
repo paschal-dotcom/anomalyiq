@@ -1,4 +1,4 @@
-// src/utils/api.js
+cat > api.js << 'EOF'
 import axios from 'axios';
 
 const BASE = process.env.REACT_APP_API_URL ||
@@ -27,3 +27,4 @@ export const exportCSV = (dtype, flaggedOnly = false) => {
   const url = `${BASE}/api/export/${dtype}?flagged_only=${flaggedOnly}`;
   window.open(url, '_blank');
 };
+EOF
