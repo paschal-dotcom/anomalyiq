@@ -453,3 +453,28 @@ def _recommend(risk: str) -> str:
         'Low':    'Log for periodic review.',
         'Normal': 'No action required.',
     }.get(risk, 'No action required.')
+# Auth routes
+from auth import (init_db, register_user, login_user, get_profile,
+                  get_audit_logs, get_current_user,
+                  RegisterRequest, LoginRequest)
+from fastapi import Depends
+
+@app.on_event("startup")
+def startup_event():
+    init_db()
+
+@app.post("/api/auth/register")
+def auth_register(req: RegisterRequest):
+    return register_user(req)
+
+@app.post("/api/auth/login")
+def auth_login(req: LoginRequest):
+    return login_user(req)
+
+@app.get("/api/auth/profile")
+def auth_profile(cu: dict = Depends(get_current_user)):
+    return get_profile(cu)
+
+@app.post("/api/auth/logout")
+def auth_logout(cu: dict = Depends(get_current_user)):
+    return {"message": "Logged out."}
