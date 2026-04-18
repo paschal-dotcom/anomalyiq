@@ -31,7 +31,7 @@ export default function Sidebar({pipelineStatus={},user,onLogout}){
                       <NavLink key={to} to={to} end={to==='/'}
                                     className={({isActive})=>"flex items-center gap-3 px-3 py-2.5 rounded-xl mb-0.5 text-sm font-medium "+(isActive?'bg-teal-50 text-teal-700 border border-teal-100':'text-slate-600 hover:bg-slate-50')}>
                                   <Icon size={16} strokeWidth={2}/>{label}
-                      </NavLink>NavLink>
+                      </NavLink>
                     ))}
                         <div className="mt-6 border-t border-slate-100 pt-4">
                                   <div className="text-xs font-bold uppercase tracking-widest text-slate-400 px-3 mb-3">Pipeline Status</div>div>
