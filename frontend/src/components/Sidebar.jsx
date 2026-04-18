@@ -3,7 +3,7 @@ import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   Home, Upload, Cpu, BarChart3, Zap, Download,
-  GitCompare, Activity, Microscope
+  GitCompare, Activity
 } from 'lucide-react';
 
 const links = [
@@ -14,7 +14,6 @@ const links = [
   { to: '/compare', label: 'Model Compare', icon: GitCompare },
   { to: '/score',   label: 'Live Scoring',  icon: Zap },
   { to: '/export',  label: 'Export',        icon: Download },
-  { to: '/explain', label: 'Explainability', icon: Microscope },
 ];
 
 const pipelineSteps = [

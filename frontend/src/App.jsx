@@ -11,7 +11,6 @@ import Results  from './pages/Results';
 import Compare  from './pages/Compare';
 import Score    from './pages/Score';
 import Export   from './pages/Export';
-import Explain  from './pages/Explain';
 
 export default function App() {
   const [uploadedDataset, setUploadedDataset] = useState(null);
@@ -81,7 +80,6 @@ export default function App() {
               <Route path="/compare" element={<Compare results={results} />} />
               <Route path="/score"   element={<Score   datasetType={datasetType} />} />
               <Route path="/export"  element={<Export  results={results} datasetType={datasetType} />} />
-              <Route path="/explain" element={<Explain results={results} datasetType={datasetType} />} />
             </Routes>
           </div>
         </main>
