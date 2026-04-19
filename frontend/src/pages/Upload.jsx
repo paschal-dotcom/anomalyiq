@@ -1,199 +1,121 @@
-// src/pages/Upload.jsx
-import React, { useState, useCallback } from 'react';
-import { useDropzone } from 'react-dropzone';
-import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
-import { Upload as UploadIcon, CheckCircle, AlertCircle, FileText } from 'lucide-react';
-import { Button, Card, SectionHeader, DatasetTypeBadge } from '../components/UI';
-import { uploadDataset } from '../utils/api';
+import React, { useState, useRef } from 'react';
+import axios from 'axios';
+
+var BASE = window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://anomalyiq-api.onrender.com';
+
+var pg = { minHeight:'100vh', background:'linear-gradient(135deg,#0f172a 0%,#1e1b4b 60%,#0f172a 100%)', padding:'32px', fontFamily:'sans-serif' };
 
 export default function Upload({ onDatasetLoaded }) {
-  const [loading, setLoading]   = useState(false);
-  const [result,  setResult]    = useState(null);
-  const [error,   setError]     = useState(null);
-  const nav = useNavigate();
+  var [file, setFile] = useState(null);
+  var [dtype, setDtype] = useState('creditcard');
+  var [loading, setLoading] = useState(false);
+  var [error, setError] = useState('');
+  var [success, setSuccess] = useState('');
+  var [dragging, setDragging] = useState(false);
+  var inputRef = useRef();
 
-  const onDrop = useCallback(async (accepted) => {
-    if (!accepted.length) return;
-    const file = accepted[0];
-    setLoading(true); setError(null); setResult(null);
-    try {
-      const res = await uploadDataset(file);
-      setResult(res.data);
-      onDatasetLoaded && onDatasetLoaded(res.data);
-      toast.success(`Dataset loaded — ${res.data.summary.total_records.toLocaleString()} records`);
-    } catch (e) {
-      const msg = e.response?.data?.detail || e.message;
-      setError(msg);
-      toast.error('Upload failed: ' + msg);
-    } finally {
-      setLoading(false);
-    }
-  }, [onDatasetLoaded]);
+  function handleFile(f) {
+    if (!f) return;
+    if (!f.name.endsWith('.csv')) { setError('Please upload a CSV file.'); return; }
+    setFile(f); setError(''); setSuccess('');
+  }
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: { 'text/csv': ['.csv'] },
-    maxFiles: 1,
-    disabled: loading,
-  });
+  function handleDrop(e) {
+    e.preventDefault(); setDragging(false);
+    var f = e.dataTransfer.files[0];
+    handleFile(f);
+  }
+
+  function handleUpload() {
+    if (!file) { setError('Please select a CSV file first.'); return; }
+    setLoading(true); setError(''); setSuccess('');
+    var fd = new FormData();
+    fd.append('file', file);
+    fd.append('dataset_type', dtype);
+    axios.post(BASE + '/api/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      .then(function(res) {
+        setSuccess('Dataset uploaded successfully! ' + (res.data.rows || '') + ' rows loaded.');
+        onDatasetLoaded && onDatasetLoaded({ ...res.data, dataset_type: dtype });
+      })
+      .catch(function(err) {
+        setError(err.response?.data?.detail || 'Upload failed. Check your file and try again.');
+      })
+      .finally(function() { setLoading(false); });
+  }
+
+  var card = { background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:'16px', padding:'28px' };
+  var inp = { width:'100%', padding:'12px 16px', borderRadius:'10px', border:'1px solid rgba(255,255,255,0.12)', background:'rgba(255,255,255,0.06)', color:'white', fontSize:'14px', outline:'none', boxSizing:'border-box' };
+  var lbl = { display:'block', fontSize:'11px', fontWeight:800, color:'rgba(255,255,255,0.4)', letterSpacing:'1.2px', textTransform:'uppercase', marginBottom:'8px' };
+  var btn = { padding:'13px 28px', borderRadius:'12px', border:'none', cursor:'pointer', fontSize:'14px', fontWeight:800, background:'linear-gradient(135deg,#0ea5e9,#8b5cf6)', color:'white', boxShadow:'0 4px 20px rgba(14,165,233,0.35)' };
 
   return (
-    <div className="space-y-6 animate-fade-up">
-      <div>
-        <h1 className="font-display text-3xl font-bold text-slate-800">Load Dataset</h1>
-        <p className="text-slate-500 mt-1">
-          Upload a CSV file. The system automatically detects whether it is a
-          CreditCard or PaySim dataset.
-        </p>
+    <div style={pg}>
+      <div style={{ position:'absolute', top:'-80px', right:'-80px', width:'350px', height:'350px', borderRadius:'50%', background:'radial-gradient(circle,rgba(139,92,246,0.15) 0%,transparent 70%)', pointerEvents:'none' }}></div>
+      <div style={{ fontSize:'28px', fontWeight:900, color:'white', marginBottom:'4px', letterSpacing:'-0.5px' }}>Load Dataset</div>
+      <div style={{ fontSize:'14px', color:'rgba(255,255,255,0.35)', marginBottom:'32px' }}>Upload a CSV file to run the three-stage fraud detection pipeline</div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px', marginBottom:'24px' }}>
+        {[['creditcard','Credit Card (MLG-ULB)','EU','European cardholders · 284,807 transactions · 30 PCA features','#a78bfa'],
+          ['paysim','PaySim (African Mobile Money)','NG','African mobile money logs · 6.3M transactions · 11 features','#0ea5e9']].map(function(d){
+          var active = dtype === d[0];
+          return (
+            <div key={d[0]} onClick={function(){setDtype(d[0]);}} style={{ background: active ? 'linear-gradient(135deg,rgba(14,165,233,0.15),rgba(139,92,246,0.1))' : 'rgba(255,255,255,0.03)', border: active ? '1px solid rgba(14,165,233,0.35)' : '1px solid rgba(255,255,255,0.07)', borderRadius:'14px', padding:'20px', cursor:'pointer', transition:'all 0.2s' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
+                <div style={{ width:'34px', height:'34px', borderRadius:'8px', background:'rgba(255,255,255,0.06)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'12px', fontWeight:900, color:d[4] }}>{d[2]}</div>
+                <div style={{ fontSize:'14px', fontWeight:800, color:'white' }}>{d[1]}</div>
+                {active && <div style={{ marginLeft:'auto', width:'8px', height:'8px', borderRadius:'50%', background:'#0ea5e9', boxShadow:'0 0 8px rgba(14,165,233,0.8)' }}></div>}
+              </div>
+              <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.38)', lineHeight:1.6 }}>{d[3]}</div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Dropzone */}
-      <Card>
-        <SectionHeader title="Upload Transaction Data" icon="📂" />
+      <div style={{ ...card, marginBottom:'24px' }}>
+        <label style={lbl}>Upload CSV File</label>
         <div
-          {...getRootProps()}
-          className={`border-2 border-dashed rounded-2xl p-16 text-center cursor-pointer
-                      transition-all duration-200
-                      ${isDragActive
-                        ? 'border-teal-400 bg-teal-50'
-                        : 'border-slate-200 hover:border-teal-300 hover:bg-slate-50'}
-                      ${loading ? 'pointer-events-none opacity-60' : ''}`}
-        >
-          <input {...getInputProps()} />
-          <div className="w-16 h-16 bg-teal-50 rounded-2xl flex items-center justify-center mx-auto mb-5">
-            <UploadIcon size={28} className="text-teal-500" strokeWidth={1.5} />
-          </div>
-          {isDragActive ? (
-            <p className="text-teal-600 font-semibold text-lg">Drop your CSV here</p>
-          ) : loading ? (
-            <p className="text-slate-500 font-semibold">Processing dataset...</p>
+          onDragOver={function(e){e.preventDefault();setDragging(true);}}
+          onDragLeave={function(){setDragging(false);}}
+          onDrop={handleDrop}
+          onClick={function(){inputRef.current.click();}}
+          style={{ border: dragging ? '2px solid #0ea5e9' : '2px dashed rgba(255,255,255,0.15)', borderRadius:'12px', padding:'48px 32px', textAlign:'center', cursor:'pointer', background: dragging ? 'rgba(14,165,233,0.06)' : 'rgba(255,255,255,0.02)', transition:'all 0.2s' }}>
+          <input ref={inputRef} type="file" accept=".csv" style={{display:'none'}} onChange={function(e){handleFile(e.target.files[0]);}}/>
+          <div style={{ fontSize:'36px', marginBottom:'12px' }}>📂</div>
+          {file ? (
+            <div>
+              <div style={{ fontSize:'15px', fontWeight:700, color:'#38bdf8', marginBottom:'4px' }}>{file.name}</div>
+              <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.35)' }}>{(file.size/1024/1024).toFixed(2)} MB</div>
+            </div>
           ) : (
-            <>
-              <p className="text-slate-700 font-semibold text-lg mb-2">
-                Drag & drop your CSV file here
-              </p>
-              <p className="text-slate-400 text-sm">or click to browse files</p>
-              <p className="text-slate-300 text-xs mt-3">
-                Supports: creditcard.csv (MLG-ULB) or paysim.csv (PaySim)
-              </p>
-            </>
+            <div>
+              <div style={{ fontSize:'15px', fontWeight:600, color:'rgba(255,255,255,0.6)', marginBottom:'6px' }}>Drop your CSV file here or click to browse</div>
+              <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.3)' }}>Supports .csv files only</div>
+            </div>
           )}
         </div>
-      </Card>
-
-      {/* Supported formats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <Card className="border-violet-100">
-          <div className="flex items-center gap-3 mb-4">
-            <span className="text-3xl">💳</span>
-            <div>
-              <div className="font-display font-bold text-slate-800">CreditCard Dataset</div>
-              <div className="text-xs text-slate-400">MLG-ULB · Kaggle</div>
-            </div>
-          </div>
-          <div className="text-sm text-slate-500 space-y-1">
-            <div>✓ Columns: <span className="font-mono text-xs">Time, V1–V28, Amount, Class</span></div>
-            <div>✓ 284,807 transactions · 492 fraud cases</div>
-            <div>✓ 0.172% fraud rate</div>
-          </div>
-        </Card>
-        <Card className="border-teal-100">
-          <div className="flex items-center gap-3 mb-4">
-            <span className="text-3xl">📱</span>
-            <div>
-              <div className="font-display font-bold text-slate-800">PaySim Dataset</div>
-              <div className="text-xs text-slate-400">African Mobile Money · Kaggle</div>
-            </div>
-          </div>
-          <div className="text-sm text-slate-500 space-y-1">
-            <div>✓ Columns: <span className="font-mono text-xs">step, type, amount, nameOrig, isFraud...</span></div>
-            <div>✓ 6.3M+ transactions · Real African data</div>
-            <div>✓ Most relevant to Nigerian fintech</div>
-          </div>
-        </Card>
       </div>
 
-      {/* Error */}
-      {error && (
-        <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
-          <AlertCircle size={18} className="text-red-500 mt-0.5 flex-shrink-0" />
-          <div>
-            <div className="font-semibold text-red-700 text-sm">Upload Failed</div>
-            <div className="text-red-500 text-sm mt-0.5">{error}</div>
-          </div>
+      {error && <div style={{ background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.25)', borderRadius:'10px', padding:'12px 16px', marginBottom:'20px', color:'#f87171', fontSize:'13px' }}>{error}</div>}
+      {success && <div style={{ background:'rgba(52,211,153,0.1)', border:'1px solid rgba(52,211,153,0.25)', borderRadius:'10px', padding:'12px 16px', marginBottom:'20px', color:'#34d399', fontSize:'13px' }}>{success}</div>}
+
+      <div style={{ display:'flex', gap:'12px', alignItems:'center' }}>
+        <button style={btn} onClick={handleUpload} disabled={loading || !file}>
+          {loading ? 'Uploading...' : 'Upload Dataset'}
+        </button>
+        {file && <button onClick={function(){setFile(null);setError('');setSuccess('');}} style={{ padding:'13px 20px', borderRadius:'12px', border:'1px solid rgba(255,255,255,0.12)', background:'transparent', color:'rgba(255,255,255,0.5)', fontSize:'14px', cursor:'pointer' }}>Clear</button>}
+      </div>
+
+      <div style={{ marginTop:'40px', ...card }}>
+        <div style={{ fontSize:'13px', fontWeight:800, color:'rgba(255,255,255,0.45)', textTransform:'uppercase', letterSpacing:'1px', marginBottom:'16px' }}>Expected CSV Format</div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+          {[['Credit Card CSV','V1, V2, ... V28, Amount, Time, Class (optional)','#a78bfa'],['PaySim CSV','step, type, amount, nameOrig, oldbalanceOrg, newbalanceOrig, nameDest, oldbalanceDest, newbalanceDest, isFraud (optional)','#0ea5e9']].map(function(f){
+            return <div key={f[0]} style={{ background:'rgba(255,255,255,0.03)', borderRadius:'10px', padding:'14px', border:'1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ fontSize:'12px', fontWeight:700, color:f[2], marginBottom:'6px' }}>{f[0]}</div>
+              <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.4)', fontFamily:'monospace', lineHeight:1.6 }}>{f[1]}</div>
+            </div>;
+          })}
         </div>
-      )}
-
-      {/* Success result */}
-      {result && (
-        <Card className="border-teal-200 bg-teal-50/30">
-          <div className="flex items-center gap-3 mb-5">
-            <CheckCircle size={22} className="text-teal-500" />
-            <div>
-              <div className="font-display font-bold text-slate-800">Dataset Loaded Successfully</div>
-              <DatasetTypeBadge type={result.dataset_type} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            {[
-              { label: 'Total Records',  value: result.summary.total_records.toLocaleString(),  color: 'text-teal-600'  },
-              { label: 'Normal',         value: result.summary.normal_records.toLocaleString(), color: 'text-green-600' },
-              { label: 'Fraudulent',     value: result.summary.fraud_records.toLocaleString(),  color: 'text-red-500'   },
-              { label: 'Missing Values', value: result.summary.missing_values,                  color: 'text-slate-600' },
-            ].map(s => (
-              <div key={s.label} className="bg-white rounded-xl p-4 border border-slate-100 text-center">
-                <div className={`font-mono text-xl font-bold ${s.color}`}>{s.value}</div>
-                <div className="text-xs text-slate-400 mt-1 uppercase tracking-wide">{s.label}</div>
-              </div>
-            ))}
-          </div>
-          <div className="mb-5 p-3 bg-orange-50 border border-orange-200 rounded-xl text-sm text-orange-700">
-            ⚠️ Class imbalance: <strong>{result.summary.fraud_pct}%</strong> of transactions are fraudulent.
-            SMOTE will balance this during LightGBM training.
-          </div>
-
-          {/* Preview table */}
-          <SectionHeader title="Data Preview (first 5 rows)" icon="👁" />
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  {result.columns.slice(0, 8).map(c => (
-                    <th key={c} className="px-3 py-2 text-left font-bold text-slate-500 uppercase tracking-wide whitespace-nowrap">
-                      {c}
-                    </th>
-                  ))}
-                  {result.columns.length > 8 && (
-                    <th className="px-3 py-2 text-slate-400">+{result.columns.length - 8} more</th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {result.preview.map((row, i) => (
-                  <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-                    {result.columns.slice(0, 8).map(c => (
-                      <td key={c} className="px-3 py-2 text-slate-600 font-mono whitespace-nowrap">
-                        {String(row[c]).slice(0, 12)}
-                      </td>
-                    ))}
-                    {result.columns.length > 8 && <td className="px-3 py-2 text-slate-300">...</td>}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-6 flex gap-3">
-            <Button onClick={() => nav('/train')}>
-              Proceed to Run Detection →
-            </Button>
-            <Button variant="outline" onClick={() => { setResult(null); }}>
-              Upload Different File
-            </Button>
-          </div>
-        </Card>
-      )}
+      </div>
     </div>
   );
 }
