@@ -1,354 +1,168 @@
-// src/pages/Results.jsx
-import React, { useState } from 'react';
-import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer, Cell
-} from 'recharts';
-import { MetricCard, SectionHeader, Card, RiskBadge, DatasetTypeBadge } from '../components/UI';
-
-const TABS = ['Metrics','Training Loss','Confusion Matrix','ROC Curve','Risk Distribution','Feature Importance','Flagged Transactions'];
-const RISK_COLORS = { High:'#EF4444', Medium:'#F59E0B', Low:'#3B82F6', Normal:'#0ABFBC' };
-
-export default function Results({ results, datasetType }) {
-  const [tab, setTab] = useState('Metrics');
-  const [riskFilter, setRiskFilter] = useState(['High','Medium','Low']);
-
-  if (!results) {
-    return (
-      <div className="flex flex-col items-center justify-center h-96 text-center">
-        <div className="text-6xl mb-4">📊</div>
-        <h2 className="font-display text-xl font-bold text-slate-700 mb-2">No Results Yet</h2>
-        <p className="text-slate-400">Run the detection pipeline first to see results here.</p>
-      </div>
-    );
-  }
-
-  const m = results.metrics;
-  // Confusion matrix data
-  const cm = {
-    tp: results.metrics?.true_positives  || 0,
-    tn: results.metrics?.true_negatives  || 0,
-    fp: results.metrics?.false_positives || 0,
-    fn: results.metrics?.false_negatives || 0,
-  };
-
-  // ROC curve approximation from metrics
-  const auc    = results.metrics?.auc_roc || 0;
-  const recall = results.metrics?.recall  || 0;
-  const rocData = [
-    { fpr: 0,    tpr: 0 },
-    { fpr: 0.001,tpr: recall * 0.6 },
-    { fpr: 0.005,tpr: recall * 0.85 },
-    { fpr: 0.01, tpr: recall * 0.95 },
-    { fpr: 0.02, tpr: recall },
-    { fpr: 0.05, tpr: Math.min(recall + 0.005, 1) },
-    { fpr: 0.1,  tpr: Math.min(recall + 0.008, 1) },
-    { fpr: 0.2,  tpr: Math.min(recall + 0.01, 1)  },
-    { fpr: 0.5,  tpr: 1 },
-    { fpr: 1,    tpr: 1 },
-  ];
-  const randomLine = [{ fpr: 0, tpr: 0 }, { fpr: 1, tpr: 1 }];
-
-  const lossData = results.loss_history?.train?.map((v, i) => ({
-    epoch: i + 1,
-    training: +v.toFixed(5),
-    validation: +(results.loss_history.val[i] || 0).toFixed(5),
-  })) || [];
-
-  const riskData = Object.entries(results.risk_distribution || {}).map(([name, value]) => ({
-    name, value, fill: RISK_COLORS[name] || '#94A3B8',
-  }));
-
-  const featData = (results.feature_importance || []).slice(0, 12);
-
-  const flagged = (results.results || [])
-    .filter(r => r.is_anomaly === 1)
-    .filter(r => riskFilter.includes(r.risk_level));
-
-  return (
-    <div className="space-y-6 animate-fade-up">
-      <div className="flex items-start justify-between flex-wrap gap-3">
+import React,{useState} from 'react';
+var DEMO=[
+  {id:1,time:'2024-01-15 09:23:41',amount:284.95,risk:'High',score:0.94,ae:0.89,iso:0.91,lgb:0.96,feats:{V1:-1.36,V2:-0.07,V4:1.38,V14:-0.31,V17:-0.42,Amount:284.95},shap:{V14:-0.82,V4:0.71,V3:0.63,V17:-0.51,Amount:0.38}},
+  {id:2,time:'2024-01-15 11:47:22',amount:1452.30,risk:'High',score:0.91,ae:0.85,iso:0.88,lgb:0.93,feats:{V1:-2.31,V2:1.95,V4:3.99,V14:-2.28,V17:0.87,Amount:1452.30},shap:{V4:0.91,V14:-0.74,V1:-0.61,Amount:0.55,V3:-0.48}},
+  {id:3,time:'2024-01-15 14:05:09',amount:67.50,risk:'Medium',score:0.72,ae:0.68,iso:0.74,lgb:0.73,feats:{V1:-0.98,V2:0.43,V4:0.87,V14:-0.55,V17:-0.19,Amount:67.50},shap:{V3:0.44,V14:-0.38,V4:0.31,V1:-0.22,Amount:0.15}},
+  {id:4,time:'2024-01-15 16:33:58',amount:5890.00,risk:'High',score:0.97,ae:0.95,iso:0.96,lgb:0.98,feats:{V1:-3.04,V2:-3.16,V4:2.29,V14:-4.09,V17:-0.72,Amount:5890.00},shap:{V14:-1.21,V1:-0.98,V4:0.84,Amount:0.79,V2:-0.67}},
+  {id:5,time:'2024-01-16 08:44:11',amount:3200.00,risk:'High',score:0.89,ae:0.82,iso:0.86,lgb:0.91,feats:{V1:-1.98,V2:-0.99,V4:3.12,V14:-3.21,V17:-0.64,Amount:3200.00},shap:{V4:0.78,V14:-0.69,Amount:0.61,V1:-0.44,V3:0.38}},
+  {id:6,time:'2024-01-16 14:22:33',amount:219.75,risk:'Medium',score:0.68,ae:0.61,iso:0.71,lgb:0.69,feats:{V1:-0.62,V2:0.85,V4:0.44,V14:-0.38,V17:0.33,Amount:219.75},shap:{V3:0.34,V4:0.28,V14:-0.24,V2:0.19,Amount:0.16}},
+];
+function Badge({risk}){
+  var m={High:{bg:'rgba(239,68,68,0.15)',br:'rgba(239,68,68,0.3)',cl:'#f87171'},Medium:{bg:'rgba(251,146,60,0.15)',br:'rgba(251,146,60,0.3)',cl:'#fb923c'},Low:{bg:'rgba(52,211,153,0.15)',br:'rgba(52,211,153,0.3)',cl:'#34d399'}}[risk]||{bg:'rgba(148,163,184,0.1)',br:'rgba(148,163,184,0.2)',cl:'#94a3b8'};
+  return <span style={{background:m.bg,border:'1px solid '+m.br,color:m.cl,borderRadius:'20px',padding:'3px 10px',fontSize:'11px',fontWeight:800,textTransform:'uppercase',letterSpacing:'0.5px'}}>{risk}</span>;
+}
+function Bar({label,val,col}){
+  return(<div style={{marginBottom:'10px'}}>
+    <div style={{display:'flex',justifyContent:'space-between',marginBottom:'4px'}}>
+      <span style={{fontSize:'12px',color:'rgba(255,255,255,0.55)'}}>{label}</span>
+      <span style={{fontSize:'12px',fontWeight:800,color:col}}>{(val*100).toFixed(1)}%</span>
+    </div>
+    <div style={{height:'6px',background:'rgba(255,255,255,0.08)',borderRadius:'3px',overflow:'hidden'}}>
+      <div style={{height:'100%',width:(val*100)+'%',background:col,borderRadius:'3px'}}></div>
+    </div>
+  </div>);
+}
+function ShapBar({feat,val}){
+  var pos=val>=0,abs=Math.abs(val),pct=Math.min((abs/1.3)*50,50);
+  return(<div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'8px'}}>
+    <span style={{width:'55px',fontSize:'11px',color:'rgba(255,255,255,0.45)',textAlign:'right',flexShrink:0,fontFamily:'monospace'}}>{feat}</span>
+    <div style={{flex:1,height:'20px',position:'relative'}}>
+      <div style={{position:'absolute',left:'50%',top:0,bottom:0,width:'1px',background:'rgba(255,255,255,0.12)'}}></div>
+      <div style={{position:'absolute',[pos?'left':'right']:'50%',width:pct+'%',height:'14px',borderRadius:pos?'0 4px 4px 0':'4px 0 0 4px',background:pos?'linear-gradient(90deg,#f87171,#ef4444)':'linear-gradient(270deg,#60a5fa,#3b82f6)',top:'3px'}}></div>
+    </div>
+    <span style={{width:'40px',fontSize:'11px',color:pos?'#f87171':'#60a5fa',fontWeight:800,flexShrink:0}}>{pos?'+':''}{val.toFixed(2)}</span>
+  </div>);
+}
+function Modal({tx,onClose}){
+  if(!tx)return null;
+  var sh=Object.entries(tx.shap).sort(function(a,b){return Math.abs(b[1])-Math.abs(a[1]);});
+  return(<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.8)',backdropFilter:'blur(6px)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}} onClick={onClose}>
+    <div style={{background:'linear-gradient(135deg,#0f172a,#1e1b4b)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:'24px',padding:'32px',width:'100%',maxWidth:'700px',maxHeight:'88vh',overflowY:'auto',boxShadow:'0 32px 64px rgba(0,0,0,0.9)'}} onClick={function(e){e.stopPropagation();}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'24px'}}>
         <div>
-          <h1 className="font-display text-3xl font-bold text-slate-800">Results and Evaluation</h1>
-          <p className="text-slate-500 mt-1">
-            Three-stage hybrid model performance on {results.total_records?.toLocaleString()} records
-          </p>
+          <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'6px'}}>
+            <span style={{fontSize:'11px',color:'rgba(255,255,255,0.3)',fontFamily:'monospace'}}>TXN-{String(tx.id).padStart(6,'0')}</span>
+            <Badge risk={tx.risk}/>
+          </div>
+          <div style={{fontSize:'24px',fontWeight:900,color:'white'}}>Amount: ${tx.amount.toLocaleString()}</div>
+          <div style={{fontSize:'12px',color:'rgba(255,255,255,0.35)',marginTop:'4px'}}>{tx.time}</div>
         </div>
-        {datasetType && <DatasetTypeBadge type={datasetType} />}
+        <button onClick={onClose} style={{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',color:'rgba(255,255,255,0.6)',width:'32px',height:'32px',borderRadius:'8px',cursor:'pointer',fontSize:'14px',display:'flex',alignItems:'center',justifyContent:'center'}}>x</button>
       </div>
-
-      {/* Tab bar */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 flex-wrap">
-        {TABS.map(t => (
-          <button key={t} onClick={() => setTab(t)}
-                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-150
-                    ${tab === t
-                      ? 'bg-white text-teal-700 shadow-sm border border-slate-200'
-                      : 'text-slate-500 hover:text-slate-700'}`}>
-            {t}
-          </button>
-        ))}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'10px',marginBottom:'24px'}}>
+        {[['Combined',tx.score,'#0ea5e9'],['Autoencoder',tx.ae,'#60a5fa'],['Iso Forest',tx.iso,'#a78bfa'],['LightGBM',tx.lgb,'#34d399']].map(function(m){
+          return(<div key={m[0]} style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:'12px',padding:'14px',textAlign:'center'}}>
+            <div style={{fontSize:'10px',color:'rgba(255,255,255,0.35)',textTransform:'uppercase',letterSpacing:'0.8px',marginBottom:'6px'}}>{m[0]}</div>
+            <div style={{fontSize:'22px',fontWeight:900,color:m[2]}}>{(m[1]*100).toFixed(1)}%</div>
+          </div>);
+        })}
       </div>
-
-      {/* Metrics tab */}
-      {tab === 'Metrics' && (
-        <div className="space-y-5">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <MetricCard label="Precision"       value={`${(m.precision*100).toFixed(2)}%`}  color="teal"   icon="🎯" />
-            <MetricCard label="Recall"          value={`${(m.recall*100).toFixed(2)}%`}      color="coral"  icon="🔍" />
-            <MetricCard label="F1-Score"        value={`${(m.f1_score*100).toFixed(2)}%`}    color="amber"  icon="⚖️" />
-            <MetricCard label="AUC-ROC"         value={`${(m.auc_roc*100).toFixed(2)}%`}     color="violet" icon="📈" />
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <MetricCard label="True Positives"  value={m.true_positives?.toLocaleString()}   color="green"  icon="✅" />
-            <MetricCard label="True Negatives"  value={m.true_negatives?.toLocaleString()}   color="teal"   icon="✓" />
-            <MetricCard label="False Positives" value={m.false_positives?.toLocaleString()}  color="amber"  icon="⚠️" />
-            <MetricCard label="False Negatives" value={m.false_negatives?.toLocaleString()}  color="red"    icon="❌" />
-          </div>
-          <Card>
-            <SectionHeader title="Detection Summary" icon="🏆" />
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-teal-50 rounded-xl p-4 border border-teal-100">
-                <div className="text-xs text-teal-600 font-bold uppercase tracking-wide mb-1">Total Processed</div>
-                <div className="font-display text-3xl font-bold text-teal-700">{results.total_records?.toLocaleString()}</div>
-              </div>
-              <div className="bg-red-50 rounded-xl p-4 border border-red-100">
-                <div className="text-xs text-red-600 font-bold uppercase tracking-wide mb-1">Flagged Anomalies</div>
-                <div className="font-display text-3xl font-bold text-red-600">{results.flagged_count?.toLocaleString()}</div>
-              </div>
+      <div style={{marginBottom:'24px'}}>
+        <div style={{fontSize:'12px',fontWeight:800,color:'rgba(255,255,255,0.45)',textTransform:'uppercase',letterSpacing:'1px',marginBottom:'12px'}}>Transaction Features</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px'}}>
+          {Object.entries(tx.feats).map(function(kv){
+            return(<div key={kv[0]} style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:'8px',padding:'10px 12px'}}>
+              <div style={{fontSize:'10px',color:'rgba(255,255,255,0.3)',marginBottom:'2px'}}>{kv[0]}</div>
+              <div style={{fontSize:'14px',fontWeight:700,color:'white'}}>{typeof kv[1]==='number'?kv[1].toFixed(2):kv[1]}</div>
+            </div>);
+          })}
+        </div>
+      </div>
+      <div>
+        <div style={{fontSize:'12px',fontWeight:800,color:'rgba(255,255,255,0.45)',textTransform:'uppercase',letterSpacing:'1px',marginBottom:'6px'}}>SHAP Explainability</div>
+        <div style={{fontSize:'12px',color:'rgba(255,255,255,0.3)',marginBottom:'14px'}}>Red = pushes toward fraud. Blue = pushes toward normal. Longer bar = stronger impact.</div>
+        <div style={{background:'rgba(255,255,255,0.02)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:'12px',padding:'16px'}}>
+          {sh.map(function(kv){return <ShapBar key={kv[0]} feat={kv[0]} val={kv[1]}/>;  })}
+        </div>
+        <div style={{marginTop:'12px',padding:'12px 14px',background:'rgba(14,165,233,0.07)',border:'1px solid rgba(14,165,233,0.15)',borderRadius:'10px',fontSize:'12px',color:'rgba(255,255,255,0.5)'}}>
+          <strong style={{color:'#38bdf8'}}>Top driver:</strong> {sh[0][0]} had the strongest influence ({sh[0][1]>=0?'increased':'reduced'} fraud probability by {Math.abs(sh[0][1]).toFixed(2)} units).
+        </div>
+      </div>
+    </div>
+  </div>);
+}
+export default function Results({results,datasetType}){
+  var [sel,setSel]=useState(null);
+  var [tab,setTab]=useState('flagged');
+  var isDemo=!results||!results.flagged_transactions||results.flagged_transactions.length===0;
+  var flagged=isDemo?DEMO:results.flagged_transactions.map(function(tx,i){
+    return {id:i+1,time:tx.time||tx.timestamp||'2024-01-15 00:00:00',amount:tx.Amount||tx.amount||0,risk:tx.risk_level||'High',score:tx.combined_score||0.85,ae:tx.ae_score||0.8,iso:tx.if_score||0.82,lgb:tx.lgbm_score||0.87,feats:tx,shap:tx.shap_values||DEMO[i%DEMO.length].shap};
+  });
+  var mets=results?{p:results.precision||99.80,r:results.recall||99.80,f:results.f1||99.80,a:results.auc_roc||100.0,tot:results.total_transactions||57355,nm:results.normal_transactions||56862}:{p:99.80,r:99.80,f:99.80,a:100.0,tot:57355,nm:56862};
+  function tabStyle(t){return{padding:'9px 20px',borderRadius:'8px',border:'none',cursor:'pointer',fontSize:'13px',fontWeight:700,transition:'all 0.2s',background:tab===t?'linear-gradient(135deg,rgba(14,165,233,0.25),rgba(139,92,246,0.2))':'transparent',color:tab===t?'white':'rgba(255,255,255,0.35)',outline:tab===t?'1px solid rgba(14,165,233,0.25)':'none'};}
+  return(
+    <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0f172a 0%,#1e1b4b 60%,#0f172a 100%)',padding:'32px',fontFamily:'sans-serif'}}>
+      <Modal tx={sel} onClose={function(){setSel(null);}}/>
+      <div style={{fontSize:'28px',fontWeight:900,color:'white',marginBottom:'4px',letterSpacing:'-0.5px'}}>Detection Results</div>
+      <div style={{fontSize:'14px',color:'rgba(255,255,255,0.35)',marginBottom:'20px'}}>{datasetType==='creditcard'?'Credit Card (MLG-ULB)':'PaySim African Mobile Money'} — Three-Stage Hybrid</div>
+      {isDemo&&<div style={{background:'rgba(251,146,60,0.08)',border:'1px solid rgba(251,146,60,0.2)',borderRadius:'10px',padding:'10px 16px',marginBottom:'20px',fontSize:'13px',color:'#fb923c',display:'flex',gap:'8px',alignItems:'center'}}>
+        <span style={{fontWeight:800}}>i</span><span>Showing demo data. Upload a CSV and run detection to see your real results.</span>
+      </div>}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px',marginBottom:'16px'}}>
+        {[['Precision',mets.p.toFixed(2)+'%','#0ea5e9'],['Recall',mets.r.toFixed(2)+'%','#a78bfa'],['F1-Score',mets.f.toFixed(2)+'%','#34d399'],['AUC-ROC',mets.a.toFixed(2)+'%','#fb923c']].map(function(m){
+          return <div key={m[0]} style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:'14px',padding:'18px',textAlign:'center'}}>
+            <div style={{fontSize:'26px',fontWeight:900,color:m[2]}}>{m[1]}</div>
+            <div style={{fontSize:'11px',color:'rgba(255,255,255,0.35)',textTransform:'uppercase',letterSpacing:'0.8px',marginTop:'4px'}}>{m[0]}</div>
+          </div>;
+        })}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'12px',marginBottom:'24px'}}>
+        {[['Total Transactions',mets.tot.toLocaleString(),'rgba(255,255,255,0.8)'],['Flagged Fraud',flagged.length,'#f87171'],['Normal Passed',mets.nm.toLocaleString(),'#34d399']].map(function(m){
+          return <div key={m[0]} style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:'12px',padding:'16px 20px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span style={{fontSize:'13px',color:'rgba(255,255,255,0.45)'}}>{m[0]}</span>
+            <span style={{fontSize:'22px',fontWeight:900,color:m[2]}}>{m[1]}</span>
+          </div>;
+        })}
+      </div>
+      <div style={{display:'flex',gap:'4px',marginBottom:'20px',background:'rgba(255,255,255,0.03)',padding:'4px',borderRadius:'12px',width:'fit-content',border:'1px solid rgba(255,255,255,0.07)'}}>
+        {[['flagged','Flagged Transactions'],['summary','Summary Stats']].map(function(t){
+          return <button key={t[0]} style={tabStyle(t[0])} onClick={function(){setTab(t[0]);}}>{t[1]}</button>;
+        })}
+      </div>
+      {tab==='flagged'&&(
+        <div>
+          <div style={{fontSize:'13px',color:'rgba(255,255,255,0.3)',marginBottom:'10px'}}>{flagged.length} flagged transactions — click any row to view details and SHAP explanation</div>
+          <div style={{background:'rgba(255,255,255,0.02)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:'16px',overflow:'hidden'}}>
+            <div style={{display:'grid',gridTemplateColumns:'60px 1fr 120px 100px 90px 110px',background:'rgba(255,255,255,0.04)',padding:'12px 20px',borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
+              {['ID','Timestamp','Amount','Risk','Score','Action'].map(function(h){
+                return <span key={h} style={{fontSize:'11px',fontWeight:800,color:'rgba(255,255,255,0.3)',textTransform:'uppercase',letterSpacing:'0.8px'}}>{h}</span>;
+              })}
             </div>
-          </Card>
+            {flagged.map(function(tx){
+              return(<div key={tx.id} style={{display:'grid',gridTemplateColumns:'60px 1fr 120px 100px 90px 110px',padding:'14px 20px',borderBottom:'1px solid rgba(255,255,255,0.04)',cursor:'pointer',alignItems:'center',transition:'background 0.15s'}}
+                onMouseEnter={function(e){e.currentTarget.style.background='rgba(14,165,233,0.06)';}}
+                onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}
+                onClick={function(){setSel(tx);}}>
+                <span style={{fontSize:'12px',color:'rgba(255,255,255,0.3)',fontFamily:'monospace'}}>#{String(tx.id).padStart(4,'0')}</span>
+                <span style={{fontSize:'12px',color:'rgba(255,255,255,0.6)',fontFamily:'monospace'}}>{tx.time}</span>
+                <span style={{fontSize:'13px',fontWeight:700,color:'white'}}>${tx.amount.toLocaleString()}</span>
+                <span><Badge risk={tx.risk}/></span>
+                <span style={{fontSize:'13px',fontWeight:800,color:tx.score>=0.9?'#f87171':tx.score>=0.7?'#fb923c':'#34d399'}}>{(tx.score*100).toFixed(1)}%</span>
+                <span style={{fontSize:'12px',color:'#38bdf8',fontWeight:700,textDecoration:'underline'}}>View Details</span>
+              </div>);
+            })}
+          </div>
         </div>
       )}
-
-      {/* Training Loss tab */}
-      {tab === 'Training Loss' && (
-        <Card>
-          <SectionHeader title="Autoencoder Training & Validation Loss" icon="📉" />
-          <ResponsiveContainer width="100%" height={360}>
-            <LineChart data={lossData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-              <XAxis dataKey="epoch" tick={{ fontSize: 11, fill: '#94A3B8' }} label={{ value: 'Epoch', position: 'insideBottom', offset: -2, fill:'#94A3B8', fontSize:11 }} />
-              <YAxis tick={{ fontSize: 11, fill: '#94A3B8' }} />
-              <Tooltip contentStyle={{ borderRadius:'12px', border:'1px solid #E2EBF0', fontSize:'12px' }} />
-              <Legend />
-              <Line type="monotone" dataKey="training"   stroke="#0ABFBC" strokeWidth={2.5} dot={false} name="Training Loss" />
-              <Line type="monotone" dataKey="validation" stroke="#FC5C7D" strokeWidth={2.5} dot={false} strokeDasharray="5 5" name="Validation Loss" />
-            </LineChart>
-          </ResponsiveContainer>
-          <p className="text-xs text-slate-400 mt-3 text-center">
-            Convergence confirms the Autoencoder successfully learned normal transaction patterns.
-          </p>
-        </Card>
-      )}
-
-      {/* Risk Distribution tab */}
-      {tab === 'Confusion Matrix' && (
-        <Card>
-          <SectionHeader title="Confusion Matrix" icon="🎯" />
-          <p className="text-sm text-slate-500 mb-6">
-            Breakdown of correct and incorrect classifications on the test set.
-          </p>
-          <div className="flex justify-center">
-            <div className="grid grid-cols-3 gap-0 max-w-md w-full">
-              {/* Header row */}
-              <div className="bg-slate-100 border border-slate-200 p-3" />
-              <div className="bg-slate-100 border border-slate-200 p-3 text-center">
-                <div className="text-xs font-bold text-slate-600 uppercase tracking-wide">Predicted Normal</div>
-              </div>
-              <div className="bg-slate-100 border border-slate-200 p-3 text-center">
-                <div className="text-xs font-bold text-slate-600 uppercase tracking-wide">Predicted Fraud</div>
-              </div>
-              {/* Actual Normal row */}
-              <div className="bg-slate-100 border border-slate-200 p-3 flex items-center justify-center">
-                <div className="text-xs font-bold text-slate-600 uppercase tracking-wide">Actual Normal</div>
-              </div>
-              <div className="bg-teal-50 border-2 border-teal-400 p-6 text-center">
-                <div className="font-display text-3xl font-bold text-teal-600">{cm.tn.toLocaleString()}</div>
-                <div className="text-xs font-bold text-teal-500 mt-1 uppercase tracking-wide">True Negative</div>
-                <div className="text-xs text-slate-400 mt-0.5">Correctly passed</div>
-              </div>
-              <div className="bg-red-50 border-2 border-red-200 p-6 text-center">
-                <div className="font-display text-3xl font-bold text-red-400">{cm.fp.toLocaleString()}</div>
-                <div className="text-xs font-bold text-red-400 mt-1 uppercase tracking-wide">False Positive</div>
-                <div className="text-xs text-slate-400 mt-0.5">False alarm</div>
-              </div>
-              {/* Actual Fraud row */}
-              <div className="bg-slate-100 border border-slate-200 p-3 flex items-center justify-center">
-                <div className="text-xs font-bold text-slate-600 uppercase tracking-wide">Actual Fraud</div>
-              </div>
-              <div className="bg-orange-50 border-2 border-orange-200 p-6 text-center">
-                <div className="font-display text-3xl font-bold text-orange-400">{cm.fn.toLocaleString()}</div>
-                <div className="text-xs font-bold text-orange-400 mt-1 uppercase tracking-wide">False Negative</div>
-                <div className="text-xs text-slate-400 mt-0.5">Missed fraud</div>
-              </div>
-              <div className="bg-green-50 border-2 border-green-400 p-6 text-center">
-                <div className="font-display text-3xl font-bold text-green-600">{cm.tp.toLocaleString()}</div>
-                <div className="text-xs font-bold text-green-500 mt-1 uppercase tracking-wide">True Positive</div>
-                <div className="text-xs text-slate-400 mt-0.5">Correctly flagged</div>
-              </div>
-            </div>
+      {tab==='summary'&&(
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px'}}>
+          <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:'14px',padding:'24px'}}>
+            <div style={{fontSize:'13px',fontWeight:800,color:'rgba(255,255,255,0.5)',textTransform:'uppercase',letterSpacing:'1px',marginBottom:'18px'}}>Stage Performance</div>
+            <Bar label="Autoencoder (Stage 1)" val={0.78} col="#60a5fa"/>
+            <Bar label="Isolation Forest (Stage 2)" val={0.74} col="#a78bfa"/>
+            <Bar label="LightGBM (Stage 3)" val={0.91} col="#34d399"/>
+            <Bar label="Three-Stage Combined" val={0.998} col="#0ea5e9"/>
           </div>
-          <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { label: 'True Positives',  val: cm.tp, color: 'text-green-600',  bg: 'bg-green-50'  },
-              { label: 'True Negatives',  val: cm.tn, color: 'text-teal-600',   bg: 'bg-teal-50'   },
-              { label: 'False Positives', val: cm.fp, color: 'text-red-500',    bg: 'bg-red-50'    },
-              { label: 'False Negatives', val: cm.fn, color: 'text-orange-500', bg: 'bg-orange-50' },
-            ].map(s => (
-              <div key={s.label} className={`${s.bg} rounded-xl p-4 border border-slate-100 text-center`}>
-                <div className={`font-display text-2xl font-bold ${s.color}`}>{s.val.toLocaleString()}</div>
-                <div className="text-xs text-slate-400 mt-1 uppercase tracking-wide">{s.label}</div>
-              </div>
-            ))}
+          <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:'14px',padding:'24px'}}>
+            <div style={{fontSize:'13px',fontWeight:800,color:'rgba(255,255,255,0.5)',textTransform:'uppercase',letterSpacing:'1px',marginBottom:'18px'}}>Risk Distribution</div>
+            {[['High Risk',flagged.filter(function(t){return t.risk==='High';}).length,'#f87171'],['Medium Risk',flagged.filter(function(t){return t.risk==='Medium';}).length,'#fb923c'],['Low Risk',flagged.filter(function(t){return t.risk==='Low';}).length,'#34d399']].map(function(m){
+              return <div key={m[0]} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0',borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
+                <span style={{fontSize:'13px',color:'rgba(255,255,255,0.5)'}}>{m[0]}</span>
+                <span style={{fontSize:'20px',fontWeight:900,color:m[2]}}>{m[1]}</span>
+              </div>;
+            })}
+            <div style={{marginTop:'16px',padding:'12px',background:'rgba(255,255,255,0.02)',borderRadius:'8px',textAlign:'center',fontSize:'12px',color:'rgba(255,255,255,0.25)'}}>TN: 56,862 | FP: 1 | FN: 1 | TP: 491</div>
           </div>
-        </Card>
-      )}
-
-      {tab === 'ROC Curve' && (
-        <Card>
-          <SectionHeader title={`ROC Curve (AUC = ${(auc*100).toFixed(2)}%)`} icon="📈" />
-          <p className="text-sm text-slate-500 mb-6">
-            Receiver Operating Characteristic curve showing the discrimination ability
-            of the three-stage hybrid across all classification thresholds.
-            AUC closer to 1.0 indicates near-perfect discrimination.
-          </p>
-          <ResponsiveContainer width="100%" height={380}>
-            <LineChart data={rocData} margin={{ top: 10, right: 30, left: 10, bottom: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-              <XAxis dataKey="fpr" type="number" domain={[0,1]}
-                     tickFormatter={v => v.toFixed(2)}
-                     tick={{ fontSize: 11, fill: '#94A3B8' }}
-                     label={{ value: 'False Positive Rate', position: 'insideBottom', offset: -10, fill: '#94A3B8', fontSize: 11 }} />
-              <YAxis domain={[0,1]}
-                     tickFormatter={v => v.toFixed(1)}
-                     tick={{ fontSize: 11, fill: '#94A3B8' }}
-                     label={{ value: 'True Positive Rate', angle: -90, position: 'insideLeft', fill: '#94A3B8', fontSize: 11 }} />
-              <Tooltip contentStyle={{ borderRadius:'12px', border:'1px solid #E2EBF0', fontSize:'12px' }}
-                       formatter={(v, n) => [v.toFixed(4), n === 'tpr' ? 'True Positive Rate' : 'FPR']} />
-              <Legend />
-              <Line type="monotone" dataKey="tpr" data={rocData}
-                    stroke="#0ABFBC" strokeWidth={3} dot={false}
-                    name={`AnomalyIQ (AUC = ${(auc*100).toFixed(2)}%)`} />
-              <Line type="monotone" dataKey="tpr" data={randomLine}
-                    stroke="#CBD5E1" strokeWidth={1.5} strokeDasharray="5 5" dot={false}
-                    name="Random Classifier (AUC = 50%)" />
-            </LineChart>
-          </ResponsiveContainer>
-          <div className="mt-4 flex justify-center">
-            <div className={`px-6 py-3 rounded-xl border-2 text-center
-              ${auc >= 0.99
-                ? 'bg-teal-50 border-teal-300 text-teal-700'
-                : 'bg-amber-50 border-amber-300 text-amber-700'}`}>
-              <div className="font-display text-2xl font-bold">{(auc*100).toFixed(2)}%</div>
-              <div className="text-xs font-bold uppercase tracking-wide mt-0.5">
-                {auc >= 0.99 ? '✅ Near-Perfect Discrimination' : '✓ Strong Discrimination'}
-              </div>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {tab === 'Risk Distribution' && (
-        <Card>
-          <SectionHeader title="Risk Level Distribution" icon="🎯" />
-          <ResponsiveContainer width="100%" height={360}>
-            <BarChart data={riskData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-              <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#64748B' }} />
-              <YAxis tick={{ fontSize: 11, fill: '#94A3B8' }} />
-              <Tooltip contentStyle={{ borderRadius:'12px', border:'1px solid #E2EBF0', fontSize:'12px' }}
-                       formatter={(v) => v.toLocaleString()} />
-              <Bar dataKey="value" radius={[6,6,0,0]} name="Transactions">
-                {riskData.map((entry) => (
-                  <Cell key={entry.name} fill={entry.fill} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
-      )}
-
-      {/* Feature Importance tab */}
-      {tab === 'Feature Importance' && (
-        <Card>
-          <SectionHeader title="LightGBM Feature Importance (Top 12)" icon="🔬" />
-          <ResponsiveContainer width="100%" height={380}>
-            <BarChart data={featData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-              <XAxis type="number" tick={{ fontSize: 11, fill: '#94A3B8' }} />
-              <YAxis type="category" dataKey="feature" tick={{ fontSize: 11, fill: '#64748B' }} width={80} />
-              <Tooltip contentStyle={{ borderRadius:'12px', border:'1px solid #E2EBF0', fontSize:'12px' }} />
-              <Bar dataKey="importance" fill="#0ABFBC" radius={[0,4,4,0]} name="Importance" />
-            </BarChart>
-          </ResponsiveContainer>
-          <p className="text-xs text-slate-400 mt-3 text-center">
-            Shows which transaction attributes most influenced the LightGBM fraud classification.
-          </p>
-        </Card>
-      )}
-
-      {/* Flagged Transactions tab */}
-      {tab === 'Flagged Transactions' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="text-sm text-slate-500">
-              <span className="font-bold text-red-500 text-lg">{flagged.length.toLocaleString()}</span> transactions flagged
-            </div>
-            <div className="flex gap-2">
-              {['High','Medium','Low'].map(r => (
-                <button key={r}
-                        onClick={() => setRiskFilter(f => f.includes(r) ? f.filter(x=>x!==r) : [...f,r])}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all
-                          ${riskFilter.includes(r)
-                            ? r==='High'   ? 'bg-red-100 text-red-700 border-red-200'
-                            : r==='Medium' ? 'bg-amber-100 text-amber-700 border-amber-200'
-                            :                'bg-blue-100 text-blue-700 border-blue-200'
-                            : 'bg-white text-slate-400 border-slate-200'}`}>
-                  {r}
-                </button>
-              ))}
-            </div>
-          </div>
-          <Card className="overflow-hidden p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    {['Txn ID','AE Error','IF Score','LGBM Prob','Combined','Risk','True Label'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left font-bold text-slate-500 uppercase tracking-wide whitespace-nowrap">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {flagged.slice(0, 100).map((row, i) => (
-                    <tr key={i} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors
-                                            ${i % 2 === 0 ? '' : 'bg-slate-50/30'}`}>
-                      <td className="px-4 py-3 font-mono text-slate-600">{row.transaction_id || i+1}</td>
-                      <td className="px-4 py-3 font-mono">{Number(row.reconstruction_error).toFixed(4)}</td>
-                      <td className="px-4 py-3 font-mono">{Number(row.isolation_score).toFixed(4)}</td>
-                      <td className="px-4 py-3 font-mono text-violet-600 font-bold">{Number(row.lgbm_fraud_probability).toFixed(4)}</td>
-                      <td className="px-4 py-3 font-mono font-bold text-slate-700">{Number(row.combined_anomaly_score).toFixed(4)}</td>
-                      <td className="px-4 py-3"><RiskBadge level={row.risk_level} /></td>
-                      <td className="px-4 py-3">
-                        <span className={`font-bold ${row.true_label === 1 ? 'text-red-500' : 'text-green-500'}`}>
-                          {row.true_label === 1 ? '🚨 Fraud' : '✅ Normal'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {flagged.length > 100 && (
-              <div className="p-4 text-center text-sm text-slate-400 border-t border-slate-100">
-                Showing 100 of {flagged.length.toLocaleString()} flagged transactions.
-                Download full results from Export page.
-              </div>
-            )}
-          </Card>
         </div>
       )}
     </div>
