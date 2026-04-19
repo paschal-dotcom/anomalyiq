@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import React from 'react';
+=======
+import React from 'react'; 
+>>>>>>> c551ccf293641dbe365186b47049f57604b74116
 import { NavLink } from 'react-router-dom';
 import { Home, Upload, Cpu, BarChart3, Zap, Download, GitCompare, Microscope } from 'lucide-react';
 
