@@ -1,102 +1,47 @@
-<<<<<<< HEAD
 import React from 'react';
-=======
-import React from 'react'; 
->>>>>>> c551ccf293641dbe365186b47049f57604b74116
 import { NavLink } from 'react-router-dom';
 import { Home, Upload, Cpu, BarChart3, Zap, Download, GitCompare, Microscope } from 'lucide-react';
-
-var links = [
-  { to: '/', label: 'Home', icon: Home },
-  { to: '/upload', label: 'Load Data', icon: Upload },
-  { to: '/train', label: 'Run Detection', icon: Cpu },
-  { to: '/results', label: 'Results', icon: BarChart3 },
-  { to: '/compare', label: 'Model Compare', icon: GitCompare },
-  { to: '/score', label: 'Live Scoring', icon: Zap },
-  { to: '/export', label: 'Export', icon: Download },
-  { to: '/explain', label: 'Explainability', icon: Microscope },
-];
-
-var steps = [
-  { label: 'Data Loaded', key: 'dataLoaded' },
-  { label: 'Preprocessing', key: 'preprocessing' },
-  { label: 'Autoencoder', key: 'autoencoder' },
-  { label: 'Isolation Forest', key: 'isolationForest' },
-  { label: 'LightGBM + SMOTE', key: 'lightgbm' },
-  { label: 'Results Ready', key: 'results' },
-];
-
-function getNavClass(isActive) {
-  var base = 'flex items-center gap-3 px-3 py-2.5 rounded-xl mb-0.5 text-sm font-medium ';
-  return base + (isActive ? 'bg-teal-50 text-teal-700 border border-teal-100' : 'text-slate-600 hover:bg-slate-50');
-}
-
-export default function Sidebar(props) {
-  var pipelineStatus = props.pipelineStatus || {};
-  var user = props.user;
-  var onLogout = props.onLogout;
-  return (
-    <aside className="fixed left-0 top-0 h-screen w-64 bg-white border-r border-slate-200 flex flex-col z-50">
-      <div className="px-6 py-5 border-b border-slate-100">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-teal-500 flex items-center justify-center text-white font-bold">A</div>
-          <div>
-            <div className="font-bold text-slate-800 text-lg">AnomalyIQ</div>
-            <div className="text-xs text-slate-400">v2.0 Three-Stage Hybrid</div>
-          </div>
-        </div>
-        <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-teal-50 border border-teal-100">
-          <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"></span>
-          <span className="text-xs font-semibold text-teal-700">AE + IF + LightGBM</span>
-        </div>
+var links=[{to:'/',label:'Home',icon:Home},{to:'/upload',label:'Load Data',icon:Upload},{to:'/train',label:'Run Detection',icon:Cpu},{to:'/results',label:'Results',icon:BarChart3},{to:'/compare',label:'Model Compare',icon:GitCompare},{to:'/score',label:'Live Scoring',icon:Zap},{to:'/export',label:'Export',icon:Download},{to:'/explain',label:'Explainability',icon:Microscope}];
+var steps=[{label:'Data Loaded',key:'dataLoaded'},{label:'Preprocessing',key:'preprocessing'},{label:'Autoencoder',key:'autoencoder'},{label:'Isolation Forest',key:'isolationForest'},{label:'LightGBM + SMOTE',key:'lightgbm'},{label:'Results Ready',key:'results'}];
+function navStyle(a){return{display:'flex',alignItems:'center',gap:'10px',padding:'10px 12px',borderRadius:'10px',marginBottom:'2px',fontSize:'13px',fontWeight:600,textDecoration:'none',background:a?'linear-gradient(135deg,rgba(14,165,233,0.18),rgba(139,92,246,0.12))':'transparent',color:a?'#38bdf8':'rgba(255,255,255,0.45)',border:a?'1px solid rgba(14,165,233,0.22)':'1px solid transparent'};}
+export default function Sidebar(props){
+  var ps=props.pipelineStatus||{},user=props.user,onLogout=props.onLogout;
+  return(<aside style={{position:'fixed',left:0,top:0,height:'100vh',width:'260px',background:'linear-gradient(180deg,#0f172a 0%,#1e1b4b 100%)',borderRight:'1px solid rgba(255,255,255,0.07)',display:'flex',flexDirection:'column',zIndex:50}}>
+    <div style={{padding:'24px 20px 18px',borderBottom:'1px solid rgba(255,255,255,0.07)'}}>
+      <div style={{display:'flex',alignItems:'center',gap:'12px',marginBottom:'12px'}}>
+        <div style={{width:'36px',height:'36px',borderRadius:'10px',background:'linear-gradient(135deg,#0ea5e9,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px',fontWeight:900,color:'white'}}>A</div>
+        <div><div style={{fontSize:'18px',fontWeight:900,color:'white'}}>AnomalyIQ</div><div style={{fontSize:'11px',color:'rgba(14,165,233,0.8)',fontWeight:700}}>v2.0 Three-Stage Hybrid</div></div>
       </div>
-      <nav className="flex-1 px-3 py-4 overflow-y-auto">
-        <div className="text-xs font-bold uppercase tracking-widest text-slate-400 px-3 mb-2">Navigation</div>
-        {links.map(function(item) {
-          var Icon = item.icon;
-          return (
-            <NavLink key={item.to} to={item.to} end={item.to === '/'}
-              className={function(p) { return getNavClass(p.isActive); }}>
-              <Icon size={16} strokeWidth={2} />
-              {item.label}
-            </NavLink>
-          );
-        })}
-        <div className="mt-6 border-t border-slate-100 pt-4">
-          <div className="text-xs font-bold uppercase tracking-widest text-slate-400 px-3 mb-3">Pipeline Status</div>
-          {steps.map(function(s) {
-            var done = !!pipelineStatus[s.key];
-            return (
-              <div key={s.key} className="flex items-center gap-2.5 px-3 py-1.5">
-                <div className={done ? 'w-2 h-2 rounded-full bg-teal-400' : 'w-2 h-2 rounded-full bg-slate-200'}></div>
-                <span className={done ? 'text-xs text-slate-700' : 'text-xs text-slate-400'}>{s.label}</span>
-                {done && <span className="ml-auto text-xs text-teal-500">Done</span>}
-              </div>
-            );
-          })}
-        </div>
-      </nav>
-      <div className="px-6 py-4 border-t border-slate-100">
-        <div className="text-xs text-slate-400">
-          <div className="font-semibold text-slate-500">Godfrey Okoye University</div>
-          <div>Dept. of Computer Science</div>
-          <div className="text-teal-500 font-semibold mt-0.5">Final Year Project 2024/25</div>
-        </div>
-        {user && (
-          <div className="mt-3 pt-3 border-t border-slate-100">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-7 h-7 bg-teal-500 rounded-full flex items-center justify-center">
-                <span className="text-white text-xs font-bold">{(user.full_name || 'U').charAt(0)}</span>
-              </div>
-              <div>
-                <div className="text-xs font-semibold text-slate-700">{user.full_name}</div>
-                <div className="text-xs text-slate-400">{user.role}</div>
-              </div>
-            </div>
-            <button onClick={onLogout} className="text-xs text-red-400 hover:text-red-600 py-1 px-2 rounded hover:bg-red-50">Sign Out</button>
-          </div>
-        )}
+      <div style={{display:'inline-flex',alignItems:'center',gap:'6px',background:'rgba(14,165,233,0.08)',border:'1px solid rgba(14,165,233,0.2)',borderRadius:'20px',padding:'4px 10px'}}>
+        <div style={{width:'6px',height:'6px',borderRadius:'50%',background:'#0ea5e9'}}></div>
+        <span style={{fontSize:'10px',fontWeight:800,color:'#38bdf8'}}>AE + IF + LightGBM</span>
       </div>
-    </aside>
-  );
+    </div>
+    <nav style={{flex:1,padding:'14px 12px',overflowY:'auto'}}>
+      <div style={{fontSize:'10px',fontWeight:800,color:'rgba(255,255,255,0.22)',letterSpacing:'2px',textTransform:'uppercase',padding:'0 8px',marginBottom:'8px'}}>Navigation</div>
+      {links.map(function(item){var Icon=item.icon;return(<NavLink key={item.to} to={item.to} end={item.to==='/'} style={function(p){return navStyle(p.isActive);}}><Icon size={15} strokeWidth={2}/>{item.label}</NavLink>);})}
+      <div style={{marginTop:'18px',paddingTop:'14px',borderTop:'1px solid rgba(255,255,255,0.05)'}}>
+        <div style={{fontSize:'10px',fontWeight:800,color:'rgba(255,255,255,0.22)',letterSpacing:'2px',textTransform:'uppercase',padding:'0 8px',marginBottom:'10px'}}>Pipeline Status</div>
+        {steps.map(function(step){var done=!!ps[step.key];return(<div key={step.key} style={{display:'flex',alignItems:'center',gap:'10px',padding:'6px 8px'}}>
+          <div style={{width:'7px',height:'7px',borderRadius:'50%',background:done?'#0ea5e9':'rgba(255,255,255,0.1)',boxShadow:done?'0 0 6px rgba(14,165,233,0.7)':'none'}}></div>
+          <span style={{fontSize:'12px',color:done?'rgba(255,255,255,0.7)':'rgba(255,255,255,0.22)',fontWeight:done?600:400}}>{step.label}</span>
+          {done&&<span style={{marginLeft:'auto',fontSize:'10px',color:'#0ea5e9',fontWeight:800}}>Done</span>}
+        </div>);})}
+      </div>
+    </nav>
+    <div style={{padding:'16px 20px',borderTop:'1px solid rgba(255,255,255,0.07)'}}>
+      <div style={{fontSize:'11px',color:'rgba(255,255,255,0.3)',lineHeight:1.8}}>
+        <div style={{fontWeight:600,color:'rgba(255,255,255,0.4)'}}>Godfrey Okoye University</div>
+        <div>Dept. of Computer Science</div>
+        <div style={{color:'rgba(14,165,233,0.6)',fontWeight:700}}>Final Year Project 2024/25</div>
+      </div>
+      {user&&(<div style={{marginTop:'12px',paddingTop:'12px',borderTop:'1px solid rgba(255,255,255,0.06)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'10px'}}>
+          <div style={{width:'32px',height:'32px',borderRadius:'50%',background:'linear-gradient(135deg,#0ea5e9,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{color:'white',fontSize:'13px',fontWeight:800}}>{(user.full_name||'U').charAt(0)}</span></div>
+          <div><div style={{fontSize:'12px',fontWeight:700,color:'white'}}>{user.full_name}</div><div style={{fontSize:'10px',color:'rgba(255,255,255,0.35)'}}>{user.role}</div></div>
+        </div>
+        <button onClick={onLogout} style={{width:'100%',padding:'8px 12px',borderRadius:'8px',border:'1px solid rgba(239,68,68,0.2)',background:'rgba(239,68,68,0.06)',color:'#f87171',fontSize:'12px',fontWeight:700,cursor:'pointer',textAlign:'left'}}>Sign Out</button>
+      </div>)}
+    </div>
+  </aside>);
 }
