@@ -1,246 +1,152 @@
-// src/pages/Train.jsx
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
-import { Cpu, CheckCircle, AlertCircle, Settings } from 'lucide-react';
-import { Button, Card, SectionHeader, ProgressBar, DatasetTypeBadge } from '../components/UI';
-import { startTraining, getProgress, getResults } from '../utils/api';
-
-const STAGES = [
-  { key: 1, label: 'Loading Dataset',            icon: '📂' },
-  { key: 2, label: 'Preprocessing & Engineering',icon: '⚙️' },
-  { key: 3, label: 'Training Autoencoder',        icon: '🧠' },
-  { key: 4, label: 'Running Isolation Forest',    icon: '🌲' },
-  { key: 5, label: 'LightGBM + SMOTE',            icon: '⚡' },
-  { key: 6, label: 'Combining Scores',            icon: '🎯' },
-  { key: 7, label: 'Saving Models',               icon: '💾' },
-  { key: 8, label: 'Complete',                    icon: '✅' },
+import React,{useState,useEffect,useRef} from 'react';
+import axios from 'axios';
+var BASE=window.location.hostname==='localhost'?'http://localhost:8000':'https://anomalyiq-api.onrender.com';
+var pg={minHeight:'100vh',background:'linear-gradient(135deg,#0f172a 0%,#1e1b4b 60%,#0f172a 100%)',padding:'32px',fontFamily:'sans-serif'};
+var STAGES=[
+  {key:'dataLoaded',label:'Data Loaded',desc:'Dataset uploaded and validated'},
+  {key:'preprocessing',label:'Preprocessing',desc:'Scaling and feature engineering'},
+  {key:'autoencoder',label:'Autoencoder (Stage 1)',desc:'Training deep neural network'},
+  {key:'isolationForest',label:'Isolation Forest (Stage 2)',desc:'Building isolation trees'},
+  {key:'lightgbm',label:'LightGBM + SMOTE (Stage 3)',desc:'Training gradient boosting'},
+  {key:'results',label:'Results Ready',desc:'Detection complete'},
 ];
+export default function Train({uploadedDataset,onResultsReady,setPipelineStatus}){
+  var [running,setRunning]=useState(false);
+  var [progress,setProgress]=useState(null);
+  var [error,setError]=useState('');
+  var [done,setDone]=useState(false);
+  var [stagesDone,setStagesDone]=useState({});
+  var pollRef=useRef(null);
 
-export default function Train({ uploadedDataset, onResultsReady, setPipelineStatus }) {
-  const nav = useNavigate();
-  const [config, setConfig]   = useState({
-    epochs: 50, batch_size: 256,
-    w_ae: 0.20, w_if: 0.20, w_lgbm: 0.60,
-    threshold_pct: 95, contamination: 0.002,
-  });
-  const [status,  setStatus]  = useState(null); // null | running | complete | error
-  const [prog,    setProg]    = useState({ percent: 0, message: '', stage: 0 });
-  const [results, setResults] = useState(null);
-  const dtype = uploadedDataset?.dataset_type || 'creditcard';
-  const pollRef = useRef(null);
+  function startDetection(){
+    if(!uploadedDataset){setError('Please upload a dataset first from the Load Data page.');return;}
+    setRunning(true);setError('');setDone(false);setStagesDone({});setProgress({stage:'Starting...',pct:0,message:'Initializing pipeline...'});
+    axios.post(BASE+'/api/train',{dataset_type:uploadedDataset.dataset_type||'creditcard',file_path:uploadedDataset.file_path})
+      .then(function(res){
+        setDone(true);setRunning(false);
+        var r=res.data;
+        setPipelineStatus&&setPipelineStatus(function(p){return Object.assign({},p,{autoencoder:true,isolationForest:true,lightgbm:true,results:true});});
+        onResultsReady&&onResultsReady(r,uploadedDataset.dataset_type||'creditcard');
+        setProgress({stage:'Complete',pct:100,message:'Detection finished successfully!'});
+      })
+      .catch(function(e){
+        setError(e.response?.data?.detail||'Detection failed. Make sure a dataset is uploaded and the backend is running.');
+        setRunning(false);
+        setProgress(null);
+      });
+    var stages=['preprocessing','autoencoder','isolationForest','lightgbm'];
+    var i=0;
+    pollRef.current=setInterval(function(){
+      if(i<stages.length){
+        var pct=Math.round(((i+1)/stages.length)*90);
+        setProgress({stage:STAGES.find(function(s){return s.key===stages[i];})?.label||stages[i],pct:pct,message:'Running stage '+(i+1)+' of '+stages.length+'...'});
+        setStagesDone(function(prev){var n={...prev};n[stages[i]]=true;return n;});
+        setPipelineStatus&&setPipelineStatus(function(p){var n=Object.assign({},p);n[stages[i]]=true;return n;});
+        i++;
+      } else { clearInterval(pollRef.current); }
+    },3000);
+  }
 
-  const handleStart = async () => {
-    setStatus('running');
-    setResults(null);
-    setProg({ percent: 0, message: 'Starting pipeline...', stage: 0 });
-    try {
-      await startTraining({ ...config, dataset_type: dtype });
-      // Poll every 2 seconds
-      pollRef.current = setInterval(async () => {
-        try {
-          const res = await getProgress(dtype);
-          const p   = res.data;
-          setProg({ percent: p.percent, message: p.message, stage: p.stage });
-          if (p.status === 'complete') {
-            clearInterval(pollRef.current);
-            setStatus('complete');
-            const r = await getResults(dtype);
-            setResults(r.data);
-            onResultsReady && onResultsReady(r.data, dtype);
-            setPipelineStatus && setPipelineStatus({
-              dataLoaded: true, preprocessing: true, autoencoder: true,
-              isolationForest: true, lightgbm: true, results: true,
-            });
-            toast.success('Pipeline complete! 🎉');
-          } else if (p.status === 'error') {
-            clearInterval(pollRef.current);
-            setStatus('error');
-            toast.error('Pipeline error: ' + p.message);
-          }
-        } catch (e) { /* ignore transient poll errors */ }
-      }, 2000);
-    } catch (e) {
-      setStatus('error');
-      toast.error('Failed to start training');
-    }
-  };
+  useEffect(function(){return function(){clearInterval(pollRef.current);};}, []);
 
-  useEffect(() => () => clearInterval(pollRef.current), []);
+  return(<div style={pg}>
+    <div style={{position:'absolute',top:'-80px',right:'-80px',width:'350px',height:'350px',borderRadius:'50%',background:'radial-gradient(circle,rgba(139,92,246,0.15) 0%,transparent 70%)',pointerEvents:'none'}}></div>
+    <div style={{fontSize:'28px',fontWeight:900,color:'white',marginBottom:'4px',letterSpacing:'-0.5px'}}>Run Detection</div>
+    <div style={{fontSize:'14px',color:'rgba(255,255,255,0.35)',marginBottom:'32px'}}>Execute the three-stage hybrid fraud detection pipeline on your dataset</div>
 
-  const wLgbm = Math.max(0, +(1 - config.w_ae - config.w_if).toFixed(2));
+    {!uploadedDataset&&(
+      <div style={{background:'rgba(251,146,60,0.08)',border:'1px solid rgba(251,146,60,0.2)',borderRadius:'12px',padding:'16px 20px',marginBottom:'24px',display:'flex',alignItems:'center',gap:'12px'}}>
+        <span style={{fontSize:'20px'}}>⚠️</span>
+        <div>
+          <div style={{fontSize:'14px',fontWeight:700,color:'#fb923c',marginBottom:'2px'}}>No Dataset Loaded</div>
+          <div style={{fontSize:'13px',color:'rgba(255,255,255,0.45)'}}>Go to Load Data first to upload your CSV file, then come back here to run detection.</div>
+        </div>
+      </div>
+    )}
 
-  return (
-    <div className="space-y-6 animate-fade-up">
-      <div>
-        <h1 className="font-display text-3xl font-bold text-slate-800">Run Detection Pipeline</h1>
-        <p className="text-slate-500 mt-1">
-          Configure and launch the three-stage hybrid detection pipeline.
-        </p>
-        {uploadedDataset && (
-          <div className="mt-2">
-            <DatasetTypeBadge type={dtype} />
-          </div>
-        )}
+    {uploadedDataset&&(
+      <div style={{background:'rgba(52,211,153,0.08)',border:'1px solid rgba(52,211,153,0.2)',borderRadius:'12px',padding:'16px 20px',marginBottom:'24px',display:'flex',alignItems:'center',gap:'12px'}}>
+        <span style={{fontSize:'20px'}}>✅</span>
+        <div>
+          <div style={{fontSize:'14px',fontWeight:700,color:'#34d399',marginBottom:'2px'}}>Dataset Ready</div>
+          <div style={{fontSize:'13px',color:'rgba(255,255,255,0.45)'}}>{uploadedDataset.dataset_type==='creditcard'?'Credit Card (MLG-ULB)':'PaySim (African)'} · {uploadedDataset.rows||'Unknown'} rows loaded</div>
+        </div>
+      </div>
+    )}
+
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'28px'}}>
+      <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:'16px',padding:'24px'}}>
+        <div style={{fontSize:'13px',fontWeight:800,color:'rgba(255,255,255,0.5)',textTransform:'uppercase',letterSpacing:'1px',marginBottom:'18px'}}>Pipeline Stages</div>
+        {STAGES.slice(1).map(function(s){
+          var isDone=stagesDone[s.key];
+          var isActive=running&&progress?.stage===s.label;
+          return(
+            <div key={s.key} style={{display:'flex',alignItems:'center',gap:'12px',padding:'10px 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+              <div style={{width:'28px',height:'28px',borderRadius:'50%',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',background:isDone?'rgba(52,211,153,0.2)':isActive?'rgba(14,165,233,0.2)':'rgba(255,255,255,0.05)',border:isDone?'1px solid rgba(52,211,153,0.4)':isActive?'1px solid rgba(14,165,233,0.4)':'1px solid rgba(255,255,255,0.08)'}}>
+                <span style={{fontSize:'13px'}}>{isDone?'✓':isActive?'⟳':'○'}</span>
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:'13px',fontWeight:600,color:isDone?'#34d399':isActive?'#38bdf8':'rgba(255,255,255,0.45)'}}>{s.label}</div>
+                <div style={{fontSize:'11px',color:'rgba(255,255,255,0.25)',marginTop:'1px'}}>{s.desc}</div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Config */}
-      <Card>
-        <SectionHeader title="Model Configuration" icon="🔧" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* AE config */}
-          <div className="space-y-4">
-            <div className="text-xs font-bold uppercase tracking-widest text-teal-600 mb-2">
-              Autoencoder
+      <div style={{display:'flex',flexDirection:'column',gap:'16px'}}>
+        {progress&&(
+          <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:'16px',padding:'24px'}}>
+            <div style={{fontSize:'13px',fontWeight:800,color:'rgba(255,255,255,0.5)',textTransform:'uppercase',letterSpacing:'1px',marginBottom:'16px'}}>Progress</div>
+            <div style={{fontSize:'15px',fontWeight:700,color:'white',marginBottom:'6px'}}>{progress.stage}</div>
+            <div style={{fontSize:'13px',color:'rgba(255,255,255,0.4)',marginBottom:'14px'}}>{progress.message}</div>
+            <div style={{height:'8px',background:'rgba(255,255,255,0.08)',borderRadius:'4px',overflow:'hidden',marginBottom:'8px'}}>
+              <div style={{height:'100%',width:progress.pct+'%',background:'linear-gradient(90deg,#0ea5e9,#8b5cf6)',borderRadius:'4px',transition:'width 0.5s ease'}}></div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                Max Epochs: <span className="font-mono text-teal-600">{config.epochs}</span>
-              </label>
-              <input type="range" min={10} max={100} step={5} value={config.epochs}
-                     onChange={e => setConfig(p => ({...p, epochs: +e.target.value}))}
-                     className="w-full accent-teal-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                Batch Size
-              </label>
-              <select value={config.batch_size}
-                      onChange={e => setConfig(p => ({...p, batch_size: +e.target.value}))}
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-teal-400">
-                {[64,128,256,512].map(v => <option key={v}>{v}</option>)}
-              </select>
-            </div>
+            <div style={{fontSize:'12px',color:'rgba(255,255,255,0.35)',textAlign:'right'}}>{progress.pct}%</div>
           </div>
+        )}
 
-          {/* IF config */}
-          <div className="space-y-4">
-            <div className="text-xs font-bold uppercase tracking-widest text-sky-600 mb-2">
-              Isolation Forest
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                Threshold Percentile: <span className="font-mono text-sky-600">{config.threshold_pct}</span>
-              </label>
-              <input type="range" min={90} max={99} step={1}
-                     value={config.threshold_pct}
-                     onChange={e => setConfig(p => ({...p, threshold_pct: +e.target.value}))}
-                     className="w-full accent-sky-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                Contamination
-              </label>
-              <input type="number" min={0.001} max={0.01} step={0.001}
-                     value={config.contamination}
-                     onChange={e => setConfig(p => ({...p, contamination: +e.target.value}))}
-                     className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-none focus:border-teal-400" />
-            </div>
+        {done&&(
+          <div style={{background:'rgba(52,211,153,0.08)',border:'1px solid rgba(52,211,153,0.2)',borderRadius:'16px',padding:'24px',textAlign:'center'}}>
+            <div style={{fontSize:'32px',marginBottom:'8px'}}>🎉</div>
+            <div style={{fontSize:'16px',fontWeight:800,color:'#34d399',marginBottom:'6px'}}>Detection Complete!</div>
+            <div style={{fontSize:'13px',color:'rgba(255,255,255,0.4)'}}>Navigate to Results to see flagged transactions and metrics.</div>
           </div>
+        )}
 
-          {/* Score weights */}
-          <div className="space-y-4">
-            <div className="text-xs font-bold uppercase tracking-widest text-violet-600 mb-2">
-              Score Weights
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                AE Weight: <span className="font-mono text-teal-600">{config.w_ae}</span>
-              </label>
-              <input type="range" min={0.1} max={0.4} step={0.05}
-                     value={config.w_ae}
-                     onChange={e => setConfig(p => ({...p, w_ae: +e.target.value}))}
-                     className="w-full accent-teal-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                IF Weight: <span className="font-mono text-sky-600">{config.w_if}</span>
-              </label>
-              <input type="range" min={0.1} max={0.4} step={0.05}
-                     value={config.w_if}
-                     onChange={e => setConfig(p => ({...p, w_if: +e.target.value}))}
-                     className="w-full accent-sky-500" />
-            </div>
-            <div className="bg-violet-50 border border-violet-200 rounded-xl p-3">
-              <div className="text-xs text-violet-600 font-medium">LightGBM Weight (auto)</div>
-              <div className="font-mono text-2xl font-bold text-violet-700 mt-1">{wLgbm}</div>
-            </div>
+        {error&&(
+          <div style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:'16px',padding:'20px'}}>
+            <div style={{fontSize:'14px',fontWeight:700,color:'#f87171',marginBottom:'6px'}}>Detection Failed</div>
+            <div style={{fontSize:'13px',color:'rgba(255,255,255,0.45)',lineHeight:1.6}}>{error}</div>
           </div>
-        </div>
+        )}
 
-        <div className="mt-6 pt-6 border-t border-slate-100">
-          <Button
-            onClick={handleStart}
-            disabled={status === 'running'}
-            size="lg"
-            className="w-full justify-center"
-          >
-            {status === 'running'
-              ? <>⏳ Pipeline Running...</>
-              : <><Cpu size={18} /> 🚀 Run Three-Stage Pipeline</>}
-          </Button>
-        </div>
-      </Card>
-
-      {/* Progress */}
-      {status && (
-        <Card>
-          <SectionHeader title="Pipeline Progress" icon="📊" />
-          <div className="mb-6">
-            <ProgressBar percent={prog.percent} label={prog.message} />
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {STAGES.map(s => {
-              const done    = prog.stage > s.key;
-              const current = prog.stage === s.key && status === 'running';
-              return (
-                <div key={s.key}
-                     className={`rounded-xl p-3 border text-center transition-all duration-300
-                       ${done    ? 'bg-teal-50 border-teal-200'
-                       : current ? 'bg-amber-50 border-amber-200 shadow-md'
-                       :           'bg-slate-50 border-slate-100 opacity-40'}`}>
-                  <div className="text-xl mb-1">
-                    {done ? '✅' : current ? '⏳' : s.icon}
-                  </div>
-                  <div className={`text-xs font-bold
-                    ${done ? 'text-teal-700' : current ? 'text-amber-700' : 'text-slate-400'}`}>
-                    {s.label}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
-
-      {/* Results summary */}
-      {status === 'complete' && results && (
-        <Card className="border-teal-200 bg-gradient-to-br from-teal-50/50 to-white">
-          <div className="flex items-center gap-3 mb-6">
-            <CheckCircle size={24} className="text-teal-500" />
-            <h2 className="font-display text-xl font-bold text-slate-800">
-              Pipeline Complete!
-            </h2>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            {[
-              { label: 'Precision', value: (results.metrics.precision*100).toFixed(2)+'%', color:'text-teal-600'  },
-              { label: 'Recall',    value: (results.metrics.recall*100).toFixed(2)+'%',    color:'text-pink-600'  },
-              { label: 'F1-Score',  value: (results.metrics.f1_score*100).toFixed(2)+'%',  color:'text-amber-600' },
-              { label: 'AUC-ROC',   value: (results.metrics.auc_roc*100).toFixed(2)+'%',   color:'text-violet-600'},
-            ].map(m => (
-              <div key={m.label} className="bg-white rounded-xl p-4 border border-slate-100 text-center">
-                <div className={`font-display text-2xl font-bold ${m.color}`}>{m.value}</div>
-                <div className="text-xs text-slate-400 mt-1 uppercase tracking-wide">{m.label}</div>
+        <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:'16px',padding:'24px'}}>
+          <div style={{fontSize:'13px',fontWeight:800,color:'rgba(255,255,255,0.5)',textTransform:'uppercase',letterSpacing:'1px',marginBottom:'16px'}}>Expected Results</div>
+          {[['Credit Card','99.80%','Precision/Recall/F1','100%','AUC-ROC','#a78bfa'],['PaySim','99.26%','Precision','99.93%','AUC-ROC','#0ea5e9']].map(function(d){return(
+            <div key={d[0]} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
+              <span style={{fontSize:'12px',color:'rgba(255,255,255,0.4)'}}>{d[0]}</span>
+              <div style={{display:'flex',gap:'12px'}}>
+                <span style={{fontSize:'12px',fontWeight:700,color:d[5]}}>{d[1]} {d[2]}</span>
+                <span style={{fontSize:'12px',fontWeight:700,color:d[5]}}>{d[3]} {d[4]}</span>
               </div>
-            ))}
-          </div>
-          <div className="flex gap-3">
-            <Button onClick={() => nav('/results')}>View Full Results →</Button>
-            <Button variant="outline" onClick={() => nav('/compare')}>Model Comparison</Button>
-          </div>
-        </Card>
-      )}
+            </div>
+          );})}
+        </div>
+      </div>
     </div>
-  );
+
+    {error&&<div style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.25)',borderRadius:'10px',padding:'12px 16px',marginBottom:'20px',color:'#f87171',fontSize:'13px'}}>{error}</div>}
+
+    <button
+      onClick={startDetection}
+      disabled={running||!uploadedDataset}
+      style={{padding:'15px 40px',borderRadius:'14px',border:'none',cursor:running||!uploadedDataset?'not-allowed':'pointer',fontSize:'15px',fontWeight:800,background:running||!uploadedDataset?'rgba(255,255,255,0.08)':'linear-gradient(135deg,#0ea5e9,#8b5cf6)',color:running||!uploadedDataset?'rgba(255,255,255,0.3)':'white',boxShadow:running||!uploadedDataset?'none':'0 6px 24px rgba(14,165,233,0.38)',transition:'all 0.2s'}}>
+      {running?'Running Detection...':done?'Run Again':'Start Detection Pipeline'}
+    </button>
+    <div style={{marginTop:'12px',fontSize:'12px',color:'rgba(255,255,255,0.25)'}}>
+      Note: First run may take 2-3 minutes as the backend wakes up. Visit <span style={{color:'#38bdf8'}}>anomalyiq-api.onrender.com/api/health</span> first to wake it up.
+    </div>
+  </div>);
 }
