@@ -28,7 +28,7 @@ function ShapBar({feat,val}){
     <span style={{width:'55px',fontSize:'11px',color:'rgba(255,255,255,0.45)',textAlign:'right',flexShrink:0,fontFamily:'monospace'}}>{feat}</span>
     <div style={{flex:1,height:'20px',position:'relative'}}>
       <div style={{position:'absolute',left:'50%',top:0,bottom:0,width:'1px',background:'rgba(255,255,255,0.12)'}}></div>
-      <div style={{position:'absolute',[pos?'left':'right']:'50%',width:pct+'%',height:'14px',borderRadius:pos?'0 4px 4px 0':'4px 0 0 4px',background:pos?'linear-gradient(90deg,#f87171,#ef4444)':'linear-gradient(270deg,#60a5fa,#3b82f6)',top:'3px'}}></div>
+      <div style={{position:'absolute',left:pos?'50%':'auto',right:pos?'auto':'50%',width:pct+'%',height:'14px',borderRadius:pos?'0 4px 4px 0':'4px 0 0 4px',background:pos?'linear-gradient(90deg,#f87171,#ef4444)':'linear-gradient(270deg,#60a5fa,#3b82f6)',top:'3px'}}></div>
     </div>
     <span style={{width:'40px',fontSize:'11px',color:pos?'#f87171':'#60a5fa',fontWeight:800,flexShrink:0}}>{pos?'+':''}{val.toFixed(2)}</span>
   </div>);
