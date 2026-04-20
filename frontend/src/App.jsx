@@ -13,6 +13,8 @@ import Compare from './pages/Compare';
 import Score from './pages/Score';
 import Export from './pages/Export';
 import Explain from './pages/Explain';
+import Users from './pages/Users';
+import Audit from './pages/Audit';
 
 export default function App() {
   var storedUser = null;
@@ -73,6 +75,8 @@ export default function App() {
               <Route path="/score" element={<Score datasetType={datasetType} />} />
               <Route path="/export" element={<Export results={results} datasetType={datasetType} />} />
               <Route path="/explain" element={<Explain results={results} datasetType={datasetType} />} />
+              <Route path="/users" element={<Users user={user} />} />
+              <Route path="/audit" element={<Audit user={user} />} />
             </Routes>
           </div>
         </main>
