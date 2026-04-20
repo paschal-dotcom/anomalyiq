@@ -18,7 +18,7 @@ export default function Login({ onLogin }) {
     e.preventDefault(); setError(''); setLoading(true);
     var url = tab === 'login' ? '/api/auth/login' : '/api/auth/register';
     var body = tab === 'login' ? { email: email, password: password } : { email: email, password: password, full_name: fullName, role: role };
-    axios.post(BASE + url, body)
+    axios.post(BASE + url, body, {headers: {"ngrok-skip-browser-warning": "true"}})
       .then(function(res) {
         var d = res.data;
         localStorage.setItem('anomalyiq_token', d.token);
