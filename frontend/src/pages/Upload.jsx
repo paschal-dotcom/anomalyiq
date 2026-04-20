@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import axios from 'axios';
 
-var BASE = window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://anomalyiq-api.onrender.com';
+var BASE = window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://strewn-plant-frequent.ngrok-free.dev';
 
 var pg = { minHeight:'100vh', background:'linear-gradient(135deg,#0f172a 0%,#1e1b4b 60%,#0f172a 100%)', padding:'32px', fontFamily:'sans-serif' };
 
@@ -32,7 +32,7 @@ export default function Upload({ onDatasetLoaded }) {
     var fd = new FormData();
     fd.append('file', file);
     fd.append('dataset_type', dtype);
-    axios.post(BASE + '/api/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    axios.post(BASE + '/api/upload', fd, { headers: { 'Content-Type': 'multipart/form-data', 'ngrok-skip-browser-warning': 'true' } })
       .then(function(res) {
         setSuccess('Dataset uploaded successfully! ' + (res.data.rows || '') + ' rows loaded.');
         onDatasetLoaded && onDatasetLoaded({ ...res.data, dataset_type: dtype });

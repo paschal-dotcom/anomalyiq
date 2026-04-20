@@ -3,7 +3,7 @@ import axios from 'axios';
 
 var BASE = window.location.hostname === 'localhost'
   ? 'http://localhost:8000'
-  : 'https://anomalyiq-api.onrender.com';
+  : 'https://strewn-plant-frequent.ngrok-free.dev';
 
 export default function Login({ onLogin }) {
   var [tab, setTab] = useState('login');

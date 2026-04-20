@@ -1,6 +1,6 @@
 import React,{useState,useEffect,useRef} from 'react';
 import axios from 'axios';
-var BASE=window.location.hostname==='localhost'?'http://localhost:8000':'https://anomalyiq-api.onrender.com';
+var BASE=window.location.hostname==='localhost'?'http://localhost:8000':'https://strewn-plant-frequent.ngrok-free.dev';
 var pg={minHeight:'100vh',background:'linear-gradient(135deg,#0f172a 0%,#1e1b4b 60%,#0f172a 100%)',padding:'32px',fontFamily:'sans-serif'};
 var STAGES=[
   {key:'dataLoaded',label:'Data Loaded',desc:'Dataset uploaded and validated'},
