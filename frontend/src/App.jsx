@@ -24,7 +24,12 @@ export default function App() {
     if (s && t) storedUser = JSON.parse(s);
   } catch(e) {}
   const [user, setUser] = React.useState(storedUser);
-  const [uploadedDataset, setUploadedDataset] = useState(null);
+  const [uploadedDataset, setUploadedDataset] = useState(function() {
+  try {
+    var saved = localStorage.getItem('anomalyiq_dataset');
+    return saved ? JSON.parse(saved) : null;
+  } catch(e) { return null; }
+});
   const [results, setResults] = useState(null);
   const [datasetType, setDatasetType] = useState('creditcard');
   const [pipelineStatus, setPipelineStatus] = useState({});
@@ -36,10 +41,13 @@ export default function App() {
   }
   if (!user) return <Login onLogin={handleLogin} />;
   function handleDatasetLoaded(data) {
-    setUploadedDataset(data);
-    setDatasetType(data.dataset_type);
-    setPipelineStatus(function(p) { return Object.assign({}, p, { dataLoaded: true }); });
-  }
+  setUploadedDataset(data);
+  setDatasetType(data.dataset_type);
+  localStorage.setItem('anomalyiq_dataset', JSON.stringify(data));
+  setPipelineStatus(function(p) {
+    return Object.assign({}, p, { dataLoaded: true });
+  });
+}
   function handleResultsReady(data, dtype) { setResults(data); setDatasetType(dtype); }
   return (
     <BrowserRouter>
