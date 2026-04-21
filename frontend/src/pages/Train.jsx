@@ -1,218 +1,338 @@
-import React,{useState,useEffect,useRef} from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import {useNavigate} from 'react-router-dom';
+import { Play, Loader2, CheckCircle2, AlertCircle, TrendingUp, Database, Zap } from 'lucide-react';
 
-var BASE='http://localhost:8000';
-var pg={minHeight:'100vh',background:'linear-gradient(135deg,#0f172a 0%,#1e1b4b 60%,#0f172a 100%)',padding:'32px',fontFamily:'sans-serif'};
-var STAGES=[
-  {key:'preprocessing',label:'Preprocessing',desc:'Scaling and feature engineering'},
-  {key:'autoencoder',label:'Autoencoder (Stage 1)',desc:'Training deep neural network'},
-  {key:'isolationForest',label:'Isolation Forest (Stage 2)',desc:'Building isolation trees'},
-  {key:'lightgbm',label:'LightGBM + SMOTE (Stage 3)',desc:'Training gradient boosting'},
-  {key:'results',label:'Results Ready',desc:'Detection complete'},
-];
+const BASE = window.location.hostname === 'localhost' 
+  ? 'http://localhost:8000' 
+  : 'https://strewn-plant-frequent.ngrok-free.dev';
 
-export default function Train({uploadedDataset,onResultsReady,setPipelineStatus}){
-  var nav=useNavigate();
-  var [running,setRunning]=useState(false);
-  var [stagesDone,setStagesDone]=useState({});
-  var [currentStage,setCurrentStage]=useState(-1);
-  var [done,setDone]=useState(false);
-  var [error,setError]=useState('');
-  var [pct,setPct]=useState(0);
-  var timerRef=useRef(null);
+export default function TrainPage() {
+  const [uploadedDataset, setUploadedDataset] = useState(null);
+  const [running, setRunning] = useState(false);
+  const [status, setStatus] = useState(null); // null | 'running' | 'success' | 'error'
+  const [progress, setProgress] = useState(0);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [results, setResults] = useState(null);
 
-  function startDetection(){
-    if(!uploadedDataset){setError('Please upload a dataset first from Load Data page.');return;}
-    setRunning(true);setDone(false);setStagesDone({});setCurrentStage(0);setError('');setPct(5);
-
-    // Animate stages every 8 seconds while backend processes
-    var i=0;
-    timerRef.current=setInterval(function(){
-      if(i<STAGES.length-1){
-        setCurrentStage(i);
-        setPct(Math.round(((i+1)/(STAGES.length))*90));
-        setStagesDone(function(p){
-          var n=Object.assign({},p);
-          n[STAGES[i].key]=true;
-          return n;
-        });
-        setPipelineStatus&&setPipelineStatus(function(p){
-          var n=Object.assign({},p);
-          n[STAGES[i].key]=true;
-          return n;
-        });
-        i++;
+  useEffect(() => {
+    // Load uploaded dataset info from localStorage
+    const datasetInfo = localStorage.getItem('anomalyiq_dataset');
+    if (datasetInfo) {
+      try {
+        setUploadedDataset(JSON.parse(datasetInfo));
+      } catch (e) {
+        console.error('Failed to parse dataset info:', e);
       }
-    },8000);
+    }
+  }, []);
 
-    // Call real backend
-    var token=localStorage.getItem('anomalyiq_token');
-    axios.post(BASE+'/api/train',
-      {dataset_type:uploadedDataset.dataset_type||'creditcard',file_path:uploadedDataset.file_path},
-      {headers:{'Authorization':'Bearer '+token},timeout:600000}
-    )
-    .then(function(res){
-      clearInterval(timerRef.current);
-      // Mark all stages done
-      var allDone={};
-      STAGES.forEach(function(s){allDone[s.key]=true;});
-      setStagesDone(allDone);
-      setPipelineStatus&&setPipelineStatus(allDone);
-      setCurrentStage(STAGES.length-1);
-      setPct(100);
+  const startDetection = async () => {
+    if (!uploadedDataset) {
+      setStatus('error');
+      setErrorMessage('No dataset uploaded. Please upload a dataset first.');
+      return;
+    }
+
+    setRunning(true);
+    setStatus('running');
+    setProgress(0);
+    setErrorMessage('');
+    setResults(null);
+
+    try {
+      const token = localStorage.getItem('anomalyiq_token');
+
+      // Simulate progress updates (since backend doesn't send real-time progress)
+      const progressInterval = setInterval(() => {
+        setProgress(prev => {
+          if (prev >= 90) return prev;
+          return prev + Math.random() * 15;
+        });
+      }, 1000);
+
+      // Call backend detection endpoint
+      const response = await axios.post(
+        `${BASE}/api/detect`,
+        {
+          file_path: uploadedDataset.file_path,
+          dataset_type: uploadedDataset.dataset_type
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true'
+          },
+          timeout: 300000 // 5 minute timeout for large datasets
+        }
+      );
+
+      clearInterval(progressInterval);
+      setProgress(100);
+
+      // Save results to localStorage
+      const detectionResults = {
+        ...response.data,
+        dataset_type: uploadedDataset.dataset_type,
+        timestamp: new Date().toISOString()
+      };
+
+      localStorage.setItem('anomalyiq_results', JSON.stringify(detectionResults));
+      setResults(detectionResults);
+      setStatus('success');
+
+      // Redirect to results page after 2 seconds
+      setTimeout(() => {
+        window.location.href = '/results';
+      }, 2000);
+
+    } catch (error) {
+      console.error('Detection error:', error);
+      setStatus('error');
+      setProgress(0);
+
+      if (error.response) {
+        setErrorMessage(error.response.data.detail || 'Detection failed');
+      } else if (error.code === 'ECONNABORTED') {
+        setErrorMessage('Detection timeout - dataset may be too large');
+      } else {
+        setErrorMessage('Network error - check backend connection');
+      }
+    } finally {
       setRunning(false);
-      setDone(true);
-      // Pass results to parent
-      onResultsReady&&onResultsReady(res.data, uploadedDataset.dataset_type||'creditcard');
-      // Auto navigate to results after 2 seconds
-      setTimeout(function(){nav('/results');},2000);
-    })
-    .catch(function(err){
-      clearInterval(timerRef.current);
-      setError(err.response?.data?.detail||'Detection failed: '+err.message);
-      setRunning(false);
-    });
-  }
+    }
+  };
 
-  useEffect(function(){return function(){clearInterval(timerRef.current);};}, []);
+  // Get expected results based on dataset type
+  const getExpectedResults = () => {
+    if (!uploadedDataset) return [];
 
-  return(<div style={pg}>
-    <div style={{position:'absolute',top:'-80px',right:'-80px',width:'350px',height:'350px',borderRadius:'50%',background:'radial-gradient(circle,rgba(139,92,246,0.15) 0%,transparent 70%)',pointerEvents:'none'}}></div>
+    if (uploadedDataset.dataset_type === 'paysim') {
+      return [[
+        'PaySim (African)',
+        '99.26%',
+        'Precision',
+        '99.93%',
+        'AUC-ROC',
+        '#0ea5e9'
+      ]];
+    } else {
+      return [[
+        'Credit Card (MLG-ULB)',
+        '99.80%',
+        'Precision · Recall · F1',
+        '100%',
+        'AUC-ROC',
+        '#a78bfa'
+      ]];
+    }
+  };
 
-    <div style={{fontSize:'28px',fontWeight:900,color:'white',marginBottom:'4px',letterSpacing:'-0.5px'}}>Run Detection</div>
-    <div style={{fontSize:'14px',color:'rgba(255,255,255,0.35)',marginBottom:'28px'}}>Execute the three-stage hybrid fraud detection pipeline on your uploaded dataset</div>
+  const expectedResults = getExpectedResults();
 
-    {/* Dataset Status */}
-    {!uploadedDataset?(
-      <div style={{background:'rgba(251,146,60,0.08)',border:'1px solid rgba(251,146,60,0.2)',borderRadius:'12px',padding:'16px 20px',marginBottom:'24px',display:'flex',alignItems:'center',gap:'12px'}}>
-        <span style={{fontSize:'24px'}}>⚠️</span>
-        <div>
-          <div style={{fontSize:'14px',fontWeight:700,color:'#fb923c',marginBottom:'2px'}}>No Dataset Loaded</div>
-          <div style={{fontSize:'13px',color:'rgba(255,255,255,0.45)'}}>Please go to <strong style={{color:'#38bdf8'}}>Load Data</strong> first and upload your CSV file.</div>
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 p-8">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-white mb-2 flex items-center gap-3">
+            <Zap className="w-10 h-10 text-purple-400" />
+            Run Detection
+          </h1>
+          <p className="text-gray-400">
+            Execute the three-stage hybrid fraud detection pipeline
+          </p>
         </div>
-      </div>
-    ):(
-      <div style={{background:'rgba(52,211,153,0.08)',border:'1px solid rgba(52,211,153,0.2)',borderRadius:'12px',padding:'16px 20px',marginBottom:'24px',display:'flex',alignItems:'center',gap:'12px'}}>
-        <span style={{fontSize:'24px'}}>✅</span>
-        <div>
-          <div style={{fontSize:'14px',fontWeight:700,color:'#34d399',marginBottom:'2px'}}>Dataset Ready — {uploadedDataset.dataset_type==='creditcard'?'Credit Card (MLG-ULB)':'PaySim (African)'}</div>
-          <div style={{fontSize:'13px',color:'rgba(255,255,255,0.45)'}}>
-            {uploadedDataset.rows?.toLocaleString()||'—'} rows · {uploadedDataset.filename||uploadedDataset.file_path||'uploaded file'}
-          </div>
-        </div>
-      </div>
-    )}
 
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'24px',marginBottom:'28px'}}>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Dataset Info Card */}
+          <div className="lg:col-span-2 bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700">
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <Database className="w-6 h-6 text-blue-400" />
+              Dataset Information
+            </h2>
 
-      {/* Pipeline Stages */}
-      <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:'16px',padding:'24px'}}>
-        <div style={{fontSize:'13px',fontWeight:800,color:'rgba(255,255,255,0.5)',textTransform:'uppercase',letterSpacing:'1px',marginBottom:'18px'}}>Pipeline Stages</div>
-        {STAGES.map(function(s,idx){
-          var isDone=stagesDone[s.key];
-          var isActive=running&&currentStage===idx&&!isDone;
-          return(
-            <div key={s.key} style={{display:'flex',alignItems:'center',gap:'12px',padding:'12px 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
-              <div style={{width:'32px',height:'32px',borderRadius:'50%',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'15px',transition:'all 0.3s',
-                background:isDone?'rgba(52,211,153,0.2)':isActive?'rgba(14,165,233,0.2)':'rgba(255,255,255,0.05)',
-                border:isDone?'1px solid rgba(52,211,153,0.5)':isActive?'1px solid rgba(14,165,233,0.5)':'1px solid rgba(255,255,255,0.1)'}}>
-                {isDone?'✓':isActive?'⟳':idx+1}
-              </div>
-              <div style={{flex:1}}>
-                <div style={{fontSize:'13px',fontWeight:600,transition:'color 0.3s',
-                  color:isDone?'#34d399':isActive?'#38bdf8':'rgba(255,255,255,0.4)'}}>{s.label}</div>
-                <div style={{fontSize:'11px',color:'rgba(255,255,255,0.25)',marginTop:'2px'}}>{s.desc}</div>
-              </div>
-              {isDone&&<span style={{fontSize:'11px',color:'#34d399',fontWeight:700}}>Done ✓</span>}
-              {isActive&&<span style={{fontSize:'11px',color:'#38bdf8',fontWeight:700}}>Running...</span>}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Progress + Status */}
-      <div style={{display:'flex',flexDirection:'column',gap:'16px'}}>
-
-        {/* Progress Bar */}
-        {(running||done)&&(
-          <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:'16px',padding:'24px'}}>
-            <div style={{fontSize:'13px',fontWeight:800,color:'rgba(255,255,255,0.5)',textTransform:'uppercase',letterSpacing:'1px',marginBottom:'16px'}}>Progress</div>
-            <div style={{fontSize:'15px',fontWeight:700,color:'white',marginBottom:'14px'}}>
-              {done?'🎉 Complete!':STAGES[currentStage]?.label||'Starting...'}
-            </div>
-            <div style={{height:'10px',background:'rgba(255,255,255,0.08)',borderRadius:'5px',overflow:'hidden',marginBottom:'10px'}}>
-              <div style={{height:'100%',width:pct+'%',background:'linear-gradient(90deg,#0ea5e9,#8b5cf6)',borderRadius:'5px',transition:'width 0.8s ease'}}></div>
-            </div>
-            <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'rgba(255,255,255,0.35)'}}>
-              <span>{done?'Detection complete — redirecting to Results...':'Processing your dataset...'}</span>
-              <span style={{fontWeight:700,color:'#38bdf8'}}>{pct}%</span>
-            </div>
-          </div>
-        )}
-
-        {/* Success */}
-        {done&&(
-          <div style={{background:'rgba(52,211,153,0.08)',border:'1px solid rgba(52,211,153,0.25)',borderRadius:'16px',padding:'24px',textAlign:'center'}}>
-            <div style={{fontSize:'40px',marginBottom:'10px'}}>🎉</div>
-            <div style={{fontSize:'18px',fontWeight:900,color:'#34d399',marginBottom:'8px'}}>Detection Complete!</div>
-            <div style={{fontSize:'13px',color:'rgba(255,255,255,0.4)',marginBottom:'16px'}}>Redirecting you to Results in 2 seconds...</div>
-            <button onClick={function(){nav('/results');}} style={{padding:'10px 24px',borderRadius:'10px',border:'none',cursor:'pointer',fontSize:'13px',fontWeight:700,background:'linear-gradient(135deg,#0ea5e9,#8b5cf6)',color:'white'}}>
-              Go to Results Now →
-            </button>
-          </div>
-        )}
-
-        {/* Error */}
-        {error&&(
-          <div style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:'16px',padding:'20px'}}>
-            <div style={{fontSize:'14px',fontWeight:700,color:'#f87171',marginBottom:'8px'}}>⚠️ Detection Failed</div>
-            <div style={{fontSize:'13px',color:'rgba(255,255,255,0.5)',lineHeight:1.6}}>{error}</div>
-          </div>
-        )}
-
-        {/* Expected Results */}
-        {!running&&!done&&(
-          <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:'16px',padding:'24px'}}>
-            <div style={{fontSize:'13px',fontWeight:800,color:'rgba(255,255,255,0.5)',textTransform:'uppercase',letterSpacing:'1px',marginBottom:'14px'}}>Expected Results</div>
-            {[['Credit Card','99.80%','Precision · Recall · F1','100%','AUC-ROC','#a78bfa'],
-              ['PaySim','99.26%','Precision','99.93%','AUC-ROC','#0ea5e9']].map(function(d){return(
-              <div key={d[0]} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
-                <span style={{fontSize:'12px',color:'rgba(255,255,255,0.4)',fontWeight:600}}>{d[0]}</span>
-                <div style={{textAlign:'right'}}>
-                  <div style={{fontSize:'12px',fontWeight:700,color:d[5]}}>{d[1]} {d[2]}</div>
-                  <div style={{fontSize:'11px',color:'rgba(255,255,255,0.3)'}}>{d[3]} {d[4]}</div>
+            {uploadedDataset ? (
+              <div className="space-y-3">
+                <div className="flex justify-between items-center p-3 bg-gray-700/50 rounded-lg">
+                  <span className="text-gray-400">Dataset Type:</span>
+                  <span className="text-white font-semibold capitalize">
+                    {uploadedDataset.dataset_type === 'paysim' ? 'PaySim (African)' : 'Credit Card (MLG-ULB)'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-gray-700/50 rounded-lg">
+                  <span className="text-gray-400">Filename:</span>
+                  <span className="text-white font-mono text-sm">{uploadedDataset.filename}</span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-gray-700/50 rounded-lg">
+                  <span className="text-gray-400">File Size:</span>
+                  <span className="text-white">{(uploadedDataset.size / 1024 / 1024).toFixed(2)} MB</span>
+                </div>
+                {uploadedDataset.rows && (
+                  <div className="flex justify-between items-center p-3 bg-gray-700/50 rounded-lg">
+                    <span className="text-gray-400">Rows:</span>
+                    <span className="text-white font-semibold">{uploadedDataset.rows.toLocaleString()}</span>
+                  </div>
+                )}
+                {uploadedDataset.columns && (
+                  <div className="flex justify-between items-center p-3 bg-gray-700/50 rounded-lg">
+                    <span className="text-gray-400">Columns:</span>
+                    <span className="text-white font-semibold">{uploadedDataset.columns}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center p-3 bg-gray-700/50 rounded-lg">
+                  <span className="text-gray-400">Uploaded:</span>
+                  <span className="text-white text-sm">
+                    {new Date(uploadedDataset.uploaded_at).toLocaleString()}
+                  </span>
                 </div>
               </div>
-            );})}
+            ) : (
+              <div className="p-6 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
+                <AlertCircle className="w-8 h-8 text-yellow-400 mb-2" />
+                <p className="text-yellow-400 font-semibold">No Dataset Uploaded</p>
+                <p className="text-gray-400 text-sm mt-1">
+                  Please upload a dataset first before running detection.
+                </p>
+              </div>
+            )}
           </div>
-        )}
 
-        {/* Time estimate */}
-        {running&&(
-          <div style={{background:'rgba(14,165,233,0.06)',border:'1px solid rgba(14,165,233,0.15)',borderRadius:'12px',padding:'16px'}}>
-            <div style={{fontSize:'12px',color:'rgba(255,255,255,0.4)',lineHeight:1.7}}>
-              <div style={{fontWeight:700,color:'#38bdf8',marginBottom:'4px'}}>⏱ Estimated Time</div>
-              <div>Credit Card (284K rows): ~5-10 minutes</div>
-              <div>PaySim (6.3M rows): ~20-40 minutes</div>
-              <div style={{marginTop:'6px',color:'rgba(255,255,255,0.3)'}}>Please keep this page open while detection runs.</div>
+          {/* Expected Results Card */}
+          <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700">
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <TrendingUp className="w-6 h-6 text-green-400" />
+              Expected Results
+            </h2>
+
+            {expectedResults.length > 0 ? (
+              <div className="space-y-4">
+                {expectedResults.map(([name, metric1, label1, metric2, label2, color], idx) => (
+                  <div key={idx} className="p-4 bg-gray-700/50 rounded-xl border-l-4" style={{ borderColor: color }}>
+                    <div className="text-sm text-gray-400 mb-2">{name}</div>
+                    <div className="space-y-2">
+                      <div>
+                        <div className="text-2xl font-bold text-white">{metric1}</div>
+                        <div className="text-xs text-gray-400">{label1}</div>
+                      </div>
+                      <div>
+                        <div className="text-xl font-semibold text-white">{metric2}</div>
+                        <div className="text-xs text-gray-400">{label2}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-gray-400 text-sm">
+                Upload a dataset to see expected performance metrics.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Detection Control Card */}
+        <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-8 border border-gray-700">
+          <h2 className="text-2xl font-bold text-white mb-6">Detection Pipeline</h2>
+
+          {/* Pipeline Stages */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-xl">
+              <div className="text-purple-400 font-semibold mb-1">Stage 1</div>
+              <div className="text-white font-bold text-lg">Autoencoder</div>
+              <div className="text-gray-400 text-sm">Unsupervised · 20% weight</div>
+            </div>
+            <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
+              <div className="text-blue-400 font-semibold mb-1">Stage 2</div>
+              <div className="text-white font-bold text-lg">Isolation Forest</div>
+              <div className="text-gray-400 text-sm">Unsupervised · 20% weight</div>
+            </div>
+            <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-xl">
+              <div className="text-green-400 font-semibold mb-1">Stage 3</div>
+              <div className="text-white font-bold text-lg">LightGBM + SMOTE</div>
+              <div className="text-gray-400 text-sm">Supervised · 60% weight</div>
             </div>
           </div>
-        )}
+
+          {/* Run Button */}
+          <button
+            onClick={startDetection}
+            disabled={!uploadedDataset || running}
+            className={`w-full py-4 px-6 rounded-xl font-semibold text-white flex items-center justify-center gap-2 transition-all ${
+              !uploadedDataset || running
+                ? 'bg-gray-700 cursor-not-allowed'
+                : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 shadow-lg shadow-purple-500/50'
+            }`}
+          >
+            {running ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Running Detection...
+              </>
+            ) : (
+              <>
+                <Play className="w-5 h-5" />
+                Start Detection
+              </>
+            )}
+          </button>
+
+          {/* Progress Bar */}
+          {status === 'running' && (
+            <div className="mt-6">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm text-gray-400">Processing...</span>
+                <span className="text-sm text-purple-400 font-semibold">{Math.round(progress)}%</span>
+              </div>
+              <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-500 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <div className="mt-3 text-xs text-gray-500">
+                Running three-stage hybrid detection pipeline...
+              </div>
+            </div>
+          )}
+
+          {/* Success Message */}
+          {status === 'success' && (
+            <div className="mt-6 p-4 bg-green-500/20 border border-green-500/50 rounded-xl flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="font-semibold text-green-400">Detection Complete!</div>
+                <div className="text-sm text-gray-300 mt-1">
+                  Redirecting to results page...
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Error Message */}
+          {status === 'error' && (
+            <div className="mt-6 p-4 bg-red-500/20 border border-red-500/50 rounded-xl flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="font-semibold text-red-400">Detection Failed</div>
+                <div className="text-sm text-gray-300 mt-1">{errorMessage}</div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Info Card */}
+        <div className="mt-6 bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-gray-300">
+              <strong className="text-blue-400">Pipeline Info:</strong> The detection runs sequentially through 
+              Autoencoder → Isolation Forest → LightGBM with SMOTE, combining scores using weighted ensemble 
+              (0.20 + 0.20 + 0.60). Processing time varies based on dataset size.
+            </div>
+          </div>
+        </div>
       </div>
     </div>
-
-    {/* Start Button */}
-    {!done&&(
-      <button onClick={startDetection} disabled={running||!uploadedDataset}
-        style={{padding:'16px 48px',borderRadius:'14px',border:'none',
-          cursor:running||!uploadedDataset?'not-allowed':'pointer',
-          fontSize:'16px',fontWeight:800,transition:'all 0.2s',
-          background:running||!uploadedDataset?'rgba(255,255,255,0.08)':'linear-gradient(135deg,#0ea5e9,#8b5cf6)',
-          color:running||!uploadedDataset?'rgba(255,255,255,0.3)':'white',
-          boxShadow:running||!uploadedDataset?'none':'0 6px 24px rgba(14,165,233,0.35)'}}>
-        {running?'⟳ Running Detection...':'▶ Start Detection Pipeline'}
-      </button>
-    )}
-  </div>);
+  );
 }

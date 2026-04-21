@@ -484,3 +484,134 @@ def auth_profile(cu: dict = Depends(get_current_user)):
 @app.post("/api/auth/logout")
 def auth_logout(cu: dict = Depends(get_current_user)):
     return {"message": "Logged out."}
+
+# ============================================================================
+# ADD THIS CODE TO YOUR main.py FILE
+# ============================================================================
+# Copy everything below this line and paste it at the END of your main.py file
+# (before the last line if you have any)
+# ============================================================================
+
+from fastapi import UploadFile, File, Form
+from pydantic import BaseModel
+from datetime import datetime
+import pandas as pd
+
+# ============================================================================
+# ENDPOINT 1: Upload Dataset
+# ============================================================================
+@app.post("/api/upload")
+async def upload_dataset(
+    file: UploadFile = File(...),
+    dataset_type: str = Form(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Upload and save dataset file
+    Returns file_path and basic info
+    """
+    try:
+        # Validate file type
+        if not file.filename.endswith('.csv'):
+            raise HTTPException(status_code=400, detail="Only CSV files allowed")
+        
+        # Create upload directory
+        upload_dir = os.path.join(os.getcwd(), "uploaded_datasets")
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Save with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{dataset_type}_{timestamp}_{file.filename}"
+        file_path = os.path.join(upload_dir, filename)
+        
+        # Save file
+        contents = await file.read()
+        with open(file_path, "wb") as f:
+            f.write(contents)
+        
+        # Get basic info
+        try:
+            df = pd.read_csv(file_path)
+            rows = len(df)
+            columns = len(df.columns)
+        except:
+            rows = None
+            columns = None
+        
+        return {
+            "status": "success",
+            "file_path": file_path,
+            "filename": file.filename,
+            "rows": rows,
+            "columns": columns,
+            "dataset_type": dataset_type
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# ENDPOINT 2: Run Detection
+# ============================================================================
+class DetectionRequest(BaseModel):
+    file_path: str
+    dataset_type: str
+
+@app.post("/api/detect")
+async def run_detection(
+    request: DetectionRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Run three-stage detection pipeline
+    Returns results with metrics and flagged transactions
+    """
+    try:
+        from utils.model_manager import ModelManager
+        from utils.preprocessor import preprocess_data
+        from utils.scorer import calculate_metrics
+        
+        # Validate file
+        if not os.path.exists(request.file_path):
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        # Load data
+        df = pd.read_csv(request.file_path)
+        X_processed, y_true = preprocess_data(df, request.dataset_type)
+        
+        # Run detection
+        manager = ModelManager(dataset_type=request.dataset_type)
+        results = manager.detect(X_processed)
+        
+        # Calculate metrics
+        metrics = calculate_metrics(y_true, results['predictions'])
+        
+        # Get flagged transactions
+        flagged = df[results['predictions'] == 1].head(100)
+        
+        return {
+            "status": "success",
+            "metrics": {
+                "precision": float(metrics['precision']),
+                "recall": float(metrics['recall']),
+                "f1_score": float(metrics['f1']),
+                "auc_roc": float(metrics['auc_roc']),
+                "accuracy": float(metrics.get('accuracy', 0))
+            },
+            "confusion_matrix": {
+                "tn": int(metrics['tn']),
+                "fp": int(metrics['fp']),
+                "fn": int(metrics['fn']),
+                "tp": int(metrics['tp'])
+            },
+            "total_transactions": len(df),
+            "total_flagged": int(sum(results['predictions'])),
+            "flagged_transactions": flagged.to_dict('records')[:10]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Detection failed: {str(e)}")
+
+
+# ============================================================================
+# END OF CODE TO ADD
+# ============================================================================
