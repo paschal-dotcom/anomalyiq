@@ -9,7 +9,7 @@ import jwt
 
 SECRET_KEY = os.getenv("JWT_SECRET", "anomalyiq_secret_2024_gouni")
 ALGORITHM = "HS256"
-TOKEN_EXPIRE_HOURS = 24
+TOKEN_EXPIRE_HOURS = 120
 DB_PATH = Path(__file__).parent / "anomalyiq.db"
 bearer = HTTPBearer(auto_error=False)
 
