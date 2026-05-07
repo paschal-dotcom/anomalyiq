@@ -42,14 +42,8 @@ MultiPartParser.max_file_size = 2 * 1024 * 1024 * 1024   # 2 GB per file
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://anomalyiq.vercel.app",
-        # Railway backend URL — update after deployment:
-        os.environ.get("FRONTEND_URL", "https://anomalyiq.vercel.app"),
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
