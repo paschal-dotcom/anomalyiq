@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pkl
+*.db
+uploaded_datasets/
+node_modules/
+.env.production
+build/
+*.csv
+.DS_Store
+trained_models/
