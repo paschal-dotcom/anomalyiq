@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 
-const API = 'http://localhost:8000';
+const API = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 const DATASET_TYPES = [
   { value: 'creditcard', label: 'Credit Card',      desc: 'Kaggle credit card fraud',       icon: '💳' },

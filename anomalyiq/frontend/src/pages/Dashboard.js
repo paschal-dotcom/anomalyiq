@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 
-// const API = 'http://localhost:8000';
+// const API = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 export default function Dashboard() {
   const [summary, setSummary] = useState(null);
