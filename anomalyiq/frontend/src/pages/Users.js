@@ -52,7 +52,9 @@ export default function Users() {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  useEffect(() => {
+    fetchUsers();
+  }, []);
 
   const createUser = async (e) => {
     e.preventDefault();
