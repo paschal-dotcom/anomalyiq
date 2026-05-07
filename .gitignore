@@ -10,3 +10,5 @@ build/
 *.csv
 .DS_Store
 trained_models/
+.env.development
+.env.local
