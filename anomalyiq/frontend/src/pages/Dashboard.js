@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 
-const API = 'http://localhost:8000';
+// const API = 'http://localhost:8000';
 
 export default function Dashboard() {
   const [summary, setSummary] = useState(null);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const token = localStorage.getItem('token');
+  // const token = localStorage.getItem('token');
 
   // Load last detection results from localStorage (set by Upload page after detect)
   useEffect(() => {

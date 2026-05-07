@@ -15,7 +15,7 @@ export default function Sidebar() {
   const user      = JSON.parse(localStorage.getItem('user') || '{}');
   const role      = user.role || '';
   const isAdmin   = role === 'admin';
-  const isAnalyst = role === 'data_analyst';
+  // const isAnalyst = role === 'data_analyst';
   const isComply  = role === 'compliance_officer';
 
   // Filter nav by role

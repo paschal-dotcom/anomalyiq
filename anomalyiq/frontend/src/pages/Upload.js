@@ -28,7 +28,7 @@ export default function Upload() {
   const [stepStatus, setStepStatus]   = useState(['idle', 'idle', 'idle']);
   const [uploadResult, setUploadResult] = useState(null);
   const [trainResult,  setTrainResult]  = useState(null);
-  const [detectResult, setDetectResult] = useState(null);
+  const [, setDetectResult] = useState(null);
   const [error, setError]             = useState('');
   const [progress, setProgress]       = useState('');
 

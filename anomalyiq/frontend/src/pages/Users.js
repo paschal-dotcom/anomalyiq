@@ -16,13 +16,13 @@ const PERMISSIONS = {
 };
 
 function logActivity(icon, message, type = 'info') {
-  const log = JSON.parse(localStorage.getItem('activityLog') || '[]');
+  const log = JSON.parse(localStorage.getItem('activityLog') || '[fetchUsers]');
   log.push({ icon, message, type, time: new Date().toLocaleString() });
   localStorage.setItem('activityLog', JSON.stringify(log.slice(-50)));
 }
 
 export default function Users() {
-  const [users,      setUsers]      = useState([]);
+  const [users,      setUsers]      = useState([fetchUsers]);
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState('');
   const [success,    setSuccess]    = useState('');
@@ -52,7 +52,7 @@ export default function Users() {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchUsers(); }, []);
+  useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
   const createUser = async (e) => {
     e.preventDefault();

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Sidebar from '../components/Sidebar';
 
-const API = 'http://localhost:8000';
+// const API = 'http://localhost:8000';
 
 // Preset test transactions
 const PRESETS = [
@@ -17,7 +17,7 @@ function logActivity(icon, message, type = 'info') {
 }
 
 export default function LiveScoring() {
-  const token = localStorage.getItem('token');
+  // const token = localStorage.getItem('token');
   const lastDetect = JSON.parse(localStorage.getItem('lastDetection') || 'null');
 
   const [fields, setFields] = useState({ amount: '', time: '', v1: '', v2: '', v3: '', v4: '', v14: '', v17: '' });
