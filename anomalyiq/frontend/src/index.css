@@ -44,7 +44,7 @@ body {
 
 /* ── Layout shell ── */
 .shell { display: flex; height: 100vh; overflow: hidden; }
-.main  { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+.main  { flex: 1; overflow-y: auto; display: flex; flex-direction: column; min-width: 0; }
 .page  { padding: 32px; flex: 1; }
 
 /* ── Sidebar ── */
@@ -57,6 +57,8 @@ body {
   flex-direction: column;
   padding: 24px 0;
   gap: 4px;
+  transition: transform 0.25s ease;
+  z-index: 200;
 }
 .sidebar-brand {
   padding: 0 20px 24px;
@@ -105,10 +107,60 @@ body {
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse-dot 2s infinite; }
 @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.4} }
 
+/* Mobile topbar (hamburger) — hidden on desktop */
+.mobile-topbar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.mobile-topbar-brand {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hamburger {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 4px;
+}
+.hamburger span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: var(--text);
+  border-radius: 2px;
+  transition: all 0.2s;
+}
+
+/* Overlay for mobile sidebar */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 150;
+}
+.sidebar-overlay.visible { display: block; }
+
 /* ── Page header ── */
 .page-head {
   display: flex; align-items: flex-start; justify-content: space-between;
   margin-bottom: 28px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 .page-head h1 { font-size: 26px; font-weight: 700; color: var(--text); line-height: 1.2; }
 .page-head p  { color: var(--muted); font-size: 13px; margin-top: 4px; }
@@ -211,6 +263,7 @@ body {
   background: rgba(0,0,0,.7); backdrop-filter: blur(4px);
   display: flex; align-items: center; justify-content: center;
   z-index: 500;
+  padding: 16px;
 }
 .modal {
   background: var(--bg2);
@@ -219,6 +272,8 @@ body {
   width: 100%; max-width: 520px;
   box-shadow: var(--shadow);
   animation: modal-in .2s ease;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 @keyframes modal-in { from{opacity:0;transform:scale(.95)} to{opacity:1;transform:scale(1)} }
 .modal-sm { max-width: 400px; }
@@ -227,11 +282,11 @@ body {
 .modal-close { background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; line-height: 1; }
 .modal-close:hover { color: var(--text); }
 .modal-body { padding: 20px 24px; }
-.modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 0 24px 20px; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 0 24px 20px; flex-wrap: wrap; }
 
 /* ── Table ── */
-.table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 500px; }
 thead th { padding: 10px 16px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--bg3); }
 tbody td { padding: 13px 16px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
 tbody tr:last-child td { border-bottom: none; }
@@ -254,3 +309,92 @@ tbody tr:hover td { background: rgba(59,130,246,.04); }
 .empty-icon { font-size: 40px; opacity: .4; }
 
 code { font-family: var(--mono); background: var(--surface); padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+
+
+/* ════════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINTS
+   ════════════════════════════════════════════════════ */
+
+/* ── Tablet (≤ 1024px) ── */
+@media (max-width: 1024px) {
+  .sidebar { width: 200px; }
+  .page { padding: 24px; }
+  .stat-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  .page-head h1 { font-size: 22px; }
+}
+
+/* ── Mobile (≤ 768px) ── */
+@media (max-width: 768px) {
+  /* Show mobile topbar */
+  .mobile-topbar { display: flex; }
+
+  /* Sidebar becomes a slide-in drawer */
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: 260px;
+    transform: translateX(-100%);
+    padding-top: 16px;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.5);
+  }
+  .sidebar.open { transform: translateX(0); }
+
+  /* Main content takes full width */
+  .shell { flex-direction: column; }
+  .main  { height: 100vh; overflow-y: auto; }
+  .page  { padding: 20px 16px; }
+
+  /* Page header stacks */
+  .page-head {
+    flex-direction: column;
+    align-items: flex-start;
+    margin-bottom: 20px;
+  }
+  .page-head h1 { font-size: 20px; }
+
+  /* Stat grid — 2 columns on mobile */
+  .stat-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stat-value { font-size: 22px; }
+
+  /* Form rows stack vertically */
+  .form-row { grid-template-columns: 1fr; }
+
+  /* Modal becomes bottom sheet on mobile */
+  .overlay { align-items: flex-end; padding: 0; }
+  .modal {
+    border-radius: 20px 20px 0 0;
+    max-width: 100%;
+    max-height: 85vh;
+    animation: slide-up .25s ease;
+  }
+  @keyframes slide-up {
+    from { transform: translateY(100%); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+  .modal-foot { flex-direction: column; }
+  .modal-foot .btn { width: 100%; justify-content: center; }
+
+  /* Buttons — full width in tight spaces */
+  .btn-block-mobile { width: 100%; justify-content: center; }
+
+  /* Cards — reduce padding */
+  .card { padding: 16px; }
+}
+
+/* ── Small mobile (≤ 480px) ── */
+@media (max-width: 480px) {
+  .page { padding: 16px 12px; }
+  .stat-grid { grid-template-columns: 1fr; }
+  .stat-value { font-size: 26px; }
+  .page-head h1 { font-size: 18px; }
+  .modal-body  { padding: 16px; }
+  .modal-head  { padding: 16px 16px 0; }
+  .modal-foot  { padding: 0 16px 16px; }
+}
+
+/* ── Large desktop (≥ 1280px) ── */
+@media (min-width: 1280px) {
+  .sidebar { width: 260px; }
+  .page    { padding: 36px 40px; }
+  .stat-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+}
