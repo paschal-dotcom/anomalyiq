@@ -17,13 +17,15 @@ const PERMISSIONS = {
 };
 
 function logActivity(icon, message, type = 'info') {
-  const log = JSON.parse(localStorage.getItem('activityLog') || '[fetchUsers]');
+  // ✅ Fixed: was '[fetchUsers]' which is invalid JSON
+  const log = JSON.parse(localStorage.getItem('activityLog') || '[]');
   log.push({ icon, message, type, time: new Date().toLocaleString() });
   localStorage.setItem('activityLog', JSON.stringify(log.slice(-50)));
 }
 
 export default function Users() {
-  const [users,      setUsers]      = useState([fetchUsers]);
+  // ✅ Fixed: was useState([fetchUsers]) — function ref used before declaration
+  const [users,      setUsers]      = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState('');
   const [success,    setSuccess]    = useState('');
@@ -73,24 +75,35 @@ export default function Users() {
   const updateRole = async (username, new_role) => {
     const res  = await fetch(`${API}/api/users/role`, { method: 'PUT', headers: H, body: JSON.stringify({ username, new_role }) });
     const data = await res.json();
-    if (res.ok) { flash(data.message); setEditRole(null); logActivity('✏', `Changed ${username} role to ${new_role}`, 'info'); fetchUsers(); }
-    else flash(data.detail || 'Failed', true);
+    if (res.ok) {
+      flash(data.message);
+      setEditRole(null);
+      logActivity('✏', `Changed ${username} role to ${new_role}`, 'info');
+      fetchUsers();
+    } else flash(data.detail || 'Failed', true);
   };
 
   const resetPassword = async (e) => {
     e.preventDefault();
     const res  = await fetch(`${API}/api/users/password`, { method: 'PUT', headers: H, body: JSON.stringify({ username: resetUser.username, new_password: newPwd }) });
     const data = await res.json();
-    if (res.ok) { flash(data.message); setResetUser(null); setNewPwd(''); logActivity('🔑', `Password reset for ${resetUser.username}`, 'info'); }
-    else flash(data.detail || 'Failed', true);
+    if (res.ok) {
+      flash(data.message);
+      setResetUser(null);
+      setNewPwd('');
+      logActivity('🔑', `Password reset for ${resetUser.username}`, 'info');
+    } else flash(data.detail || 'Failed', true);
   };
 
   const deactivate = async (username) => {
     if (!window.confirm(`Deactivate "${username}"?`)) return;
     const res  = await fetch(`${API}/api/users/${username}`, { method: 'DELETE', headers: H });
     const data = await res.json();
-    if (res.ok) { flash(data.message); logActivity('🚫', `Deactivated user ${username}`, 'warn'); fetchUsers(); }
-    else flash(data.detail || 'Failed', true);
+    if (res.ok) {
+      flash(data.message);
+      logActivity('🚫', `Deactivated user ${username}`, 'warn');
+      fetchUsers();
+    } else flash(data.detail || 'Failed', true);
   };
 
   const roleBadge = (role) => ROLES.find(r => r.value === role)?.badge || 'gray';
@@ -135,7 +148,9 @@ export default function Users() {
           <div className="card">
             <div className="card-title" style={{ marginBottom: 16 }}>Users ({users.length})</div>
             {loading ? (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><span className="spinner spinner-lg" /></div>
+              <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+                <span className="spinner spinner-lg" />
+              </div>
             ) : (
               <div className="table-wrap">
                 <table>
@@ -157,7 +172,11 @@ export default function Users() {
                             <div style={{
                               width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
                               background: `linear-gradient(135deg, ${
-                                u.role === 'admin' ? '#7c3aed,#a78bfa' : u.role === 'compliance_officer' ? '#0d9488,#5eead4' : '#b45309,#fcd34d'
+                                u.role === 'admin'
+                                  ? '#7c3aed,#a78bfa'
+                                  : u.role === 'compliance_officer'
+                                  ? '#0d9488,#5eead4'
+                                  : '#b45309,#fcd34d'
                               })`,
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
                               color: '#fff', fontWeight: 700, fontSize: 14,
@@ -178,15 +197,23 @@ export default function Users() {
                               onChange={e => updateRole(u.username, e.target.value)}
                               onBlur={() => setEditRole(null)}
                               autoFocus
-                              style={{ background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 6, padding: '4px 8px', color: 'var(--text)', fontFamily: 'var(--font)', fontSize: 12 }}
+                              style={{
+                                background: 'var(--bg3)',
+                                border: '1px solid var(--border2)',
+                                borderRadius: 6, padding: '4px 8px',
+                                color: 'var(--text)',
+                                fontFamily: 'var(--font)', fontSize: 12,
+                              }}
                             >
                               {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                             </select>
                           ) : (
-                            <span className={`badge badge-${roleBadge(u.role)}`}
+                            <span
+                              className={`badge badge-${roleBadge(u.role)}`}
                               onClick={() => u.username !== me.username && setEditRole(u.username)}
                               style={{ cursor: u.username !== me.username ? 'pointer' : 'default' }}
-                              title={u.username !== me.username ? 'Click to change role' : ''}>
+                              title={u.username !== me.username ? 'Click to change role' : ''}
+                            >
                               {roleLabel(u.role)}
                             </span>
                           )}
@@ -220,7 +247,7 @@ export default function Users() {
           </div>
         </div>
 
-        {/* Create modal */}
+        {/* Create user modal */}
         {showCreate && (
           <div className="overlay" onClick={() => setShowCreate(false)}>
             <div className="modal" onClick={e => e.stopPropagation()}>
@@ -303,6 +330,7 @@ export default function Users() {
             </div>
           </div>
         )}
+
       </div>
     </div>
   );
