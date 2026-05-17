@@ -34,28 +34,36 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# ── Raise the multipart upload limit to 500 MB ──────────────────────────────────
-# FastAPI/Starlette defaults to 1 MB — way too small for 140 MB CSV files.
-# We patch the form's spool limit so large files stream to disk instead of RAM.
+# ── Raise the multipart upload limit to 2 GB ────────────────────────────────
 from starlette.formparsers import MultiPartParser
-MultiPartParser.max_file_size = 2 * 1024 * 1024 * 1024   # 2 GB per file
+MultiPartParser.max_file_size = 2 * 1024 * 1024 * 1024
 
+# ── CORS ─────────────────────────────────────────────────────────────────────
+# Key fix: list Vercel URL explicitly alongside wildcard.
+# allow_credentials MUST stay False when allow_origins contains "*".
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "*",
+        "https://anomalyiq-rho.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:3001",
+    ],
     allow_credentials=False,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
-# Railway persists /data between deployments; locally use relative paths
+# ── Paths ────────────────────────────────────────────────────────────────────
 BASE_DIR        = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH", ".")
 UPLOAD_DIR      = os.path.join(BASE_DIR, "uploaded_datasets")
 MODEL_DIR_ROOT  = os.path.join(BASE_DIR, "trained_models")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(MODEL_DIR_ROOT, exist_ok=True)
 
-# ── Pydantic models ─────────────────────────────────────────────────────────────
+# ── Pydantic models ──────────────────────────────────────────────────────────
 
 class LoginRequest(BaseModel):
     username: str
@@ -82,6 +90,24 @@ class ChangePasswordRequest(BaseModel):
 
 
 # ============================================================================
+# HEALTH  (no auth — used by Railway keep-alive)
+# ============================================================================
+
+@app.get("/")
+async def root():
+    return {"message": "AnomalyIQ API", "status": "running", "version": "2.0.0"}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+# Explicit OPTIONS handler — catches any pre-flight CORS request
+@app.options("/{rest_of_path:path}")
+async def preflight_handler(rest_of_path: str):
+    return {"status": "ok"}
+
+
+# ============================================================================
 # AUTH ENDPOINTS
 # ============================================================================
 
@@ -98,18 +124,12 @@ async def login(request: LoginRequest):
 
 @app.post("/api/register")
 async def register(request: CreateUserRequest):
-    """
-    Public self-registration endpoint.
-    New accounts are created with role 'Data Analyst' by default.
-    An admin can promote them later from the Users page.
-    """
     auth   = AuthManager()
-    # Force role to Data Analyst regardless of what client sends
     result = auth.create_user(
         request.username,
         request.full_name,
         request.email,
-        "Data Analyst",   # default role — admin can promote later
+        "Data Analyst",
         request.password,
     )
     if not result["success"]:
@@ -193,8 +213,7 @@ async def upload_dataset(
         filename  = f"{dataset_type}_{timestamp}_{file.filename}"
         file_path = os.path.join(UPLOAD_DIR, filename)
 
-        # Stream to disk in 8 MB chunks — handles 140+ MB files without OOM
-        CHUNK = 8 * 1024 * 1024   # 8 MB
+        CHUNK = 8 * 1024 * 1024
         with open(file_path, "wb") as f:
             while True:
                 chunk = await file.read(CHUNK)
@@ -202,19 +221,15 @@ async def upload_dataset(
                     break
                 f.write(chunk)
 
-        # Quick stats — count lines and sample headers only (no full RAM load)
         try:
-            # Count rows by iterating lines — works on any file size
             rows_approx = 0
             with open(file_path, "r", encoding="utf-8", errors="ignore") as fh:
                 for rows_approx, _ in enumerate(fh, start=-1):
-                    pass   # rows_approx ends at total lines - 1 (header excluded)
+                    pass
 
-            # Read just the header + first 1000 rows for column info
             df_sample   = pd.read_csv(file_path, nrows=1000)
             columns     = len(df_sample.columns)
 
-            # Count fraud labels using only the label column — avoids loading all cols
             label_col   = next((c for c in ["Class", "isFraud", "is_fraud"]
                                 if c in df_sample.columns), None)
             if label_col:
@@ -249,7 +264,7 @@ async def upload_dataset(
 
 
 # ============================================================================
-# TRAINING ENDPOINT  ←  Trains the model and SAVES it to disk
+# TRAINING ENDPOINT
 # ============================================================================
 
 @app.post("/api/train")
@@ -274,23 +289,22 @@ async def train_models(
 
         trainer          = AnomalyIQTrainer(dataset_type=request.dataset_type)
         training_results = trainer.train_all(df)
-
-        # ── Save trained model to disk so /detect can load it ──────────────────
         trainer.save_models()
-        print(f"  ✅ Models saved to trained_models/")
+
+        print(f"  ✅ Models saved")
         print(f"{'='*60}\n")
 
         return {
             "status":  "success",
             "message": "Models trained and saved successfully",
             "data": {
-                "train_size":         training_results["train_size"],
-                "test_size":          training_results["test_size"],
-                "train_percentage":   80.0,
-                "test_percentage":    20.0,
-                "metrics":            training_results["metrics"],
-                "dataset_type":       request.dataset_type,
-                "trained_by":         current_user["full_name"],
+                "train_size":       training_results["train_size"],
+                "test_size":        training_results["test_size"],
+                "train_percentage": 80.0,
+                "test_percentage":  20.0,
+                "metrics":          training_results["metrics"],
+                "dataset_type":     request.dataset_type,
+                "trained_by":       current_user["full_name"],
             }
         }
     except Exception as e:
@@ -299,7 +313,7 @@ async def train_models(
 
 
 # ============================================================================
-# DETECTION ENDPOINT  ←  LOADS saved model, NO retraining, NO SMOTE
+# DETECTION ENDPOINT
 # ============================================================================
 
 @app.post("/api/detect")
@@ -315,26 +329,21 @@ async def detect_fraud(
         print(f"  DETECTION STARTED — {request.dataset_type.upper()}")
         print(f"{'='*60}")
 
-        # ── Step 1: Load trained models ────────────────────────────────────────
         trainer = AnomalyIQTrainer(dataset_type=request.dataset_type)
         loaded  = trainer.load_models()
 
         if not loaded:
-            print("  ⚠️  No saved model found — training first...")
+            print("  ⚠️  No saved model — training first...")
             df_train = pd.read_csv(request.file_path)
             trainer.train_all(df_train)
             trainer.save_models()
 
-        # ── Step 2: Read raw CSV and apply the SAME transforms as training ──────
         print("  📂 Reading dataset...")
         df = pd.read_csv(request.file_path)
 
-        # Use trainer's helper to get label + engineered features
-        # but then RE-ALIGN to exactly the scaler's fitted columns.
-        _, y_all = trainer.prepare_data(df)      # y only — X thrown away
+        _, y_all = trainer.prepare_data(df)
         df2      = df.copy()
 
-        # Re-apply the same feature engineering the trainer uses
         cfg = trainer.config
         for col in cfg["drop_cols"]:
             if col in df2.columns:
@@ -347,47 +356,34 @@ async def detect_fraud(
         df2 = df2.drop(columns=[cfg["label_col"]], errors="ignore")
         df2 = df2.select_dtypes(include=[np.number]).fillna(0)
 
-        # Now align to EXACTLY the scaler's feature set using feature_names_in_
-        # StandardScaler saves the exact column order it was fitted on
         if hasattr(trainer.scaler, "feature_names_in_"):
             scaler_cols = list(trainer.scaler.feature_names_in_)
         else:
-            # Fallback: use base_feature_names stripped of meta-cols
             META = {"ae_reconstruction_error", "if_anomaly_score"}
             scaler_cols = [c for c in (trainer._base_feature_names or list(df2.columns))
                            if c not in META]
 
-        print(f"  Scaler expects {len(scaler_cols)} cols: {scaler_cols}")
-        # Add any missing cols as 0, drop extras, reorder
         for col in scaler_cols:
             if col not in df2.columns:
                 df2[col] = 0.0
         X_all = df2[scaler_cols].fillna(0)
 
-        print(f"  X_all shape after align: {X_all.shape}")
+        split_idx = int(len(X_all) * 0.8)
+        X_test    = X_all.iloc[split_idx:].reset_index(drop=True)
+        y_true    = y_all.iloc[split_idx:].reset_index(drop=True)
 
-        # ── Step 3: 80/20 split — use test portion only ────────────────────────
-        split_idx  = int(len(X_all) * 0.8)
-        X_test     = X_all.iloc[split_idx:].reset_index(drop=True)
-        y_true     = y_all.iloc[split_idx:].reset_index(drop=True)
-
-        print(f"  Test set: {len(X_test):,} rows  "
+        print(f"  Test set: {len(X_test):,} rows "
               f"({int(y_true.sum())} fraud / {int((y_true==0).sum())} normal)")
 
-        # ── Step 4: Scale + ensemble predict ──────────────────────────────────
         X_test_scaled  = trainer.scaler.transform(X_test).astype(np.float32)
         ensemble_probs = trainer._ensemble_predict_proba(X_test_scaled)
 
-        # ── Step 5: Find best threshold ────────────────────────────────────────
-        print("  🎯 Optimising detection threshold...")
-        best_threshold, best_f1, all_99 = _find_best_threshold(
-            y_true, ensemble_probs
-        )
+        print("  🎯 Optimising threshold...")
+        best_threshold, best_f1, all_99 = _find_best_threshold(y_true, ensemble_probs)
 
         final_preds     = (ensemble_probs > best_threshold).astype(int)
         flagged_indices = np.where(final_preds == 1)[0]
 
-        # ── Step 6: Compute metrics ────────────────────────────────────────────
         precision = float(precision_score(y_true, final_preds, zero_division=0))
         recall    = float(recall_score(y_true, final_preds, zero_division=0))
         f1        = float(f1_score(y_true, final_preds, zero_division=0))
@@ -397,33 +393,21 @@ async def detect_fraud(
         fpr_val   = float(fp / (fp + tn)) if (fp + tn) > 0 else 0.0
         fnr_val   = float(fn / (fn + tp)) if (fn + tp) > 0 else 0.0
 
-        print(f"\n{'='*60}")
-        print(f"  DETECTION METRICS")
-        print(f"{'='*60}")
-        print(f"  Precision : {precision*100:.2f}%")
-        print(f"  Recall    : {recall*100:.2f}%")
-        print(f"  F1-Score  : {f1*100:.2f}%")
-        print(f"  AUC-ROC   : {auc*100:.2f}%")
-        print(f"  Threshold : {best_threshold}")
-        print(f"  TP={tp}  FP={fp}  FN={fn}  TN={tn}")
-        print(f"{'='*60}\n")
+        print(f"  Precision:{precision*100:.2f}% Recall:{recall*100:.2f}% "
+              f"F1:{f1*100:.2f}% AUC:{auc*100:.2f}%")
 
-        # ── Step 7: Generate charts ────────────────────────────────────────────
-        charts = _generate_charts(y_true, final_preds, ensemble_probs,
-                                  auc, f1, trainer)
+        charts = _generate_charts(y_true, final_preds, ensemble_probs, auc, f1, trainer)
 
-        # ── Step 8: SHAP explanations ──────────────────────────────────────────
-        # Build meta-feature matrix for SHAP (same as _ensemble_predict_proba)
-        ae      = trainer.models["autoencoder"]
-        iso     = trainer.models["isolation_forest"]
-        ae_err  = np.clip(ae.reconstruction_error(X_test_scaled) /
-                          (trainer.ae_threshold + 1e-8), 0, 5)
-        if_raw  = -iso.decision_function(X_test_scaled)
-        if_sc   = np.clip((if_raw - trainer._if_min) /
-                          (trainer._if_max - trainer._if_min + 1e-8), 0, 1)
-        X_meta  = np.hstack([X_test_scaled,
-                              ae_err.reshape(-1, 1),
-                              if_sc.reshape(-1, 1)]).astype(np.float32)
+        ae     = trainer.models["autoencoder"]
+        iso    = trainer.models["isolation_forest"]
+        ae_err = np.clip(ae.reconstruction_error(X_test_scaled) /
+                         (trainer.ae_threshold + 1e-8), 0, 5)
+        if_raw = -iso.decision_function(X_test_scaled)
+        if_sc  = np.clip((if_raw - trainer._if_min) /
+                         (trainer._if_max - trainer._if_min + 1e-8), 0, 1)
+        X_meta = np.hstack([X_test_scaled,
+                             ae_err.reshape(-1, 1),
+                             if_sc.reshape(-1, 1)]).astype(np.float32)
 
         lgb_model  = trainer.models["lightgbm"]
         feat_names = trainer.feature_names
@@ -460,7 +444,7 @@ async def detect_fraud(
                     "threshold_used":      float(best_threshold),
                     "smote_applied":       False,
                     "all_metrics_99_plus": bool(all_99),
-                    "confusion_matrix":    {
+                    "confusion_matrix": {
                         "tn": int(tn), "fp": int(fp),
                         "fn": int(fn), "tp": int(tp)
                     },
@@ -481,10 +465,6 @@ async def detect_fraud(
 # ============================================================================
 
 def _find_best_threshold(y_true, probs):
-    """
-    Search 1000 candidates for best F1, then pick highest precision
-    among candidates within 1% of best F1.
-    """
     probs      = np.asarray(probs, dtype=np.float64)
     candidates = np.linspace(probs.min(), probs.max(), 1000)
     best_t     = float(np.median(probs))
@@ -505,7 +485,6 @@ def _find_best_threshold(y_true, probs):
         if f > best_f1:
             best_t, best_f1 = t, f
 
-    # Among top candidates, pick highest precision
     if results:
         top = [(f, p, r, t) for f, p, r, t in results if f >= best_f1 * 0.99]
         if top:
@@ -516,23 +495,18 @@ def _find_best_threshold(y_true, probs):
     return best_t, best_f1, all_99
 
 
-def _generate_charts(y_true, final_preds, ensemble_probs,
-                     auc, f1, trainer):
-    """Generate all 5 evaluation charts as base64 PNG strings."""
+def _generate_charts(y_true, final_preds, ensemble_probs, auc, f1, trainer):
     charts = {}
 
     # 1. Confusion matrix
     plt.figure(figsize=(8, 6))
     cm = sk_cm(y_true, final_preds)
     sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
-                xticklabels=["Normal","Fraud"],
-                yticklabels=["Normal","Fraud"])
+                xticklabels=["Normal","Fraud"], yticklabels=["Normal","Fraud"])
     plt.title("Confusion Matrix", fontweight="bold", fontsize=14)
     plt.ylabel("Actual"); plt.xlabel("Predicted")
-    buf = BytesIO()
-    plt.savefig(buf, format="png", dpi=100, bbox_inches="tight")
-    buf.seek(0)
-    charts["confusion_matrix"] = base64.b64encode(buf.read()).decode()
+    buf = BytesIO(); plt.savefig(buf, format="png", dpi=100, bbox_inches="tight")
+    buf.seek(0); charts["confusion_matrix"] = base64.b64encode(buf.read()).decode()
     plt.close()
 
     # 2. ROC curve
@@ -545,10 +519,8 @@ def _generate_charts(y_true, final_preds, ensemble_probs,
     plt.ylabel("True Positive Rate", fontsize=12)
     plt.title("ROC Curve — Three-Stage Hybrid", fontweight="bold", fontsize=14)
     plt.legend(loc="lower right"); plt.grid(alpha=0.3)
-    buf = BytesIO()
-    plt.savefig(buf, format="png", dpi=100, bbox_inches="tight")
-    buf.seek(0)
-    charts["roc_curve"] = base64.b64encode(buf.read()).decode()
+    buf = BytesIO(); plt.savefig(buf, format="png", dpi=100, bbox_inches="tight")
+    buf.seek(0); charts["roc_curve"] = base64.b64encode(buf.read()).decode()
     plt.close()
 
     # 3. Precision-Recall curve
@@ -556,14 +528,11 @@ def _generate_charts(y_true, final_preds, ensemble_probs,
     plt.figure(figsize=(8, 6))
     plt.plot(rec_c, prec_c, color="green", lw=2,
              label=f"Three-Stage Hybrid (F1 = {f1:.4f})")
-    plt.xlabel("Recall", fontsize=12)
-    plt.ylabel("Precision", fontsize=12)
+    plt.xlabel("Recall", fontsize=12); plt.ylabel("Precision", fontsize=12)
     plt.title("Precision-Recall Curve", fontweight="bold", fontsize=14)
     plt.legend(); plt.grid(alpha=0.3)
-    buf = BytesIO()
-    plt.savefig(buf, format="png", dpi=100, bbox_inches="tight")
-    buf.seek(0)
-    charts["pr_curve"] = base64.b64encode(buf.read()).decode()
+    buf = BytesIO(); plt.savefig(buf, format="png", dpi=100, bbox_inches="tight")
+    buf.seek(0); charts["pr_curve"] = base64.b64encode(buf.read()).decode()
     plt.close()
 
     # 4. Feature importance
@@ -571,8 +540,7 @@ def _generate_charts(y_true, final_preds, ensemble_probs,
     fi         = lgb_model.feature_importances_
     feat_names = trainer.feature_names
     top_idx    = np.argsort(fi)[::-1][:15]
-    colors     = ["#e74c3c" if i < 3 else
-                  "#e67e22" if i < 7 else "#2ecc71"
+    colors     = ["#e74c3c" if i < 3 else "#e67e22" if i < 7 else "#2ecc71"
                   for i in range(len(top_idx))]
     plt.figure(figsize=(10, 6))
     plt.barh(range(len(top_idx)), fi[top_idx], color=colors)
@@ -580,55 +548,39 @@ def _generate_charts(y_true, final_preds, ensemble_probs,
     plt.xlabel("Importance Score", fontsize=12)
     plt.title("Top 15 Feature Importance (LightGBM)", fontweight="bold", fontsize=14)
     plt.gca().invert_yaxis()
-    buf = BytesIO()
-    plt.savefig(buf, format="png", dpi=100, bbox_inches="tight")
-    buf.seek(0)
-    charts["feature_importance"] = base64.b64encode(buf.read()).decode()
+    buf = BytesIO(); plt.savefig(buf, format="png", dpi=100, bbox_inches="tight")
+    buf.seek(0); charts["feature_importance"] = base64.b64encode(buf.read()).decode()
     plt.close()
 
     # 5. Metrics bar chart
-    precision = float(precision_score(y_true, final_preds, zero_division=0))
-    recall    = float(recall_score(y_true, final_preds, zero_division=0))
-    f1_val    = float(f1_score(y_true, final_preds, zero_division=0))
-    acc       = float(accuracy_score(y_true, final_preds))
-    mv        = [precision*100, recall*100, f1_val*100, acc*100, auc*100]
-    bar_colors= ["#2ecc71" if v >= 99 else "#e67e22" if v >= 95 else "#e74c3c"
-                 for v in mv]
+    precision_v = float(precision_score(y_true, final_preds, zero_division=0))
+    recall_v    = float(recall_score(y_true, final_preds, zero_division=0))
+    f1_val      = float(f1_score(y_true, final_preds, zero_division=0))
+    acc_v       = float(accuracy_score(y_true, final_preds))
+    mv          = [precision_v*100, recall_v*100, f1_val*100, acc_v*100, auc*100]
+    bar_colors  = ["#2ecc71" if v >= 99 else "#e67e22" if v >= 95 else "#e74c3c" for v in mv]
     plt.figure(figsize=(10, 6))
     bars = plt.bar(["Precision","Recall","F1-Score","Accuracy","AUC-ROC"],
                    mv, color=bar_colors, alpha=0.9, edgecolor="black", linewidth=0.5)
-    plt.axhline(y=99, color="red", linestyle="--",
-                label="99% Target Line", linewidth=2)
-    plt.ylim([0, 108])
-    plt.ylabel("Score (%)", fontsize=12)
+    plt.axhline(y=99, color="red", linestyle="--", label="99% Target Line", linewidth=2)
+    plt.ylim([0, 108]); plt.ylabel("Score (%)", fontsize=12)
     plt.title("Model Performance Metrics", fontweight="bold", fontsize=14)
     plt.legend()
     for bar, v in zip(bars, mv):
         plt.text(bar.get_x() + bar.get_width()/2., bar.get_height() + 0.5,
-                 f"{v:.2f}%", ha="center", va="bottom",
-                 fontweight="bold", fontsize=10)
-    buf = BytesIO()
-    plt.savefig(buf, format="png", dpi=100, bbox_inches="tight")
-    buf.seek(0)
-    charts["metrics_comparison"] = base64.b64encode(buf.read()).decode()
+                 f"{v:.2f}%", ha="center", va="bottom", fontweight="bold", fontsize=10)
+    buf = BytesIO(); plt.savefig(buf, format="png", dpi=100, bbox_inches="tight")
+    buf.seek(0); charts["metrics_comparison"] = base64.b64encode(buf.read()).decode()
     plt.close()
 
     return charts
 
 
-# ============================================================================
-# HEALTH
-# ============================================================================
-
-@app.get("/")
-async def root():
-    return {"message": "AnomalyIQ API", "status": "running", "version": "2.0.0"}
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
-
-
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 8000)),
+        reload=True
+    )
