@@ -34,13 +34,7 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# ── Raise the multipart upload limit to 2 GB ────────────────────────────────
-from starlette.formparsers import MultiPartParser
-MultiPartParser.max_file_size = 2 * 1024 * 1024 * 1024
-
 # ── CORS ─────────────────────────────────────────────────────────────────────
-# Key fix: list Vercel URL explicitly alongside wildcard.
-# allow_credentials MUST stay False when allow_origins contains "*".
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -90,7 +84,7 @@ class ChangePasswordRequest(BaseModel):
 
 
 # ============================================================================
-# HEALTH  (no auth — used by Railway keep-alive)
+# HEALTH
 # ============================================================================
 
 @app.get("/")
@@ -101,7 +95,6 @@ async def root():
 async def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
-# Explicit OPTIONS handler — catches any pre-flight CORS request
 @app.options("/{rest_of_path:path}")
 async def preflight_handler(rest_of_path: str):
     return {"status": "ok"}
@@ -197,6 +190,8 @@ async def deactivate_user(username: str,
 
 # ============================================================================
 # UPLOAD ENDPOINT
+# ── File is streamed in 8 MB chunks directly to disk — no RAM limit issue.
+# ── MultiPartParser patch removed — not needed with starlette >= 0.40.0
 # ============================================================================
 
 @app.post("/api/upload")
@@ -213,6 +208,7 @@ async def upload_dataset(
         filename  = f"{dataset_type}_{timestamp}_{file.filename}"
         file_path = os.path.join(UPLOAD_DIR, filename)
 
+        # Stream to disk in 8 MB chunks — handles 500 MB+ files without OOM
         CHUNK = 8 * 1024 * 1024
         with open(file_path, "wb") as f:
             while True:
@@ -221,17 +217,18 @@ async def upload_dataset(
                     break
                 f.write(chunk)
 
+        # Quick stats — count lines without loading full file into RAM
         try:
             rows_approx = 0
             with open(file_path, "r", encoding="utf-8", errors="ignore") as fh:
                 for rows_approx, _ in enumerate(fh, start=-1):
                     pass
 
-            df_sample   = pd.read_csv(file_path, nrows=1000)
-            columns     = len(df_sample.columns)
+            df_sample = pd.read_csv(file_path, nrows=1000)
+            columns   = len(df_sample.columns)
 
-            label_col   = next((c for c in ["Class", "isFraud", "is_fraud"]
-                                if c in df_sample.columns), None)
+            label_col = next((c for c in ["Class", "isFraud", "is_fraud"]
+                              if c in df_sample.columns), None)
             if label_col:
                 label_df    = pd.read_csv(file_path, usecols=[label_col],
                                           dtype={label_col: "int8"})
@@ -281,7 +278,7 @@ async def train_models(
         print(f"{'='*60}")
 
         df        = pd.read_csv(request.file_path)
-        label_col = next((c for c in ["Class","isFraud","is_fraud"]
+        label_col = next((c for c in ["Class", "isFraud", "is_fraud"]
                           if c in df.columns), None)
         if label_col is None:
             raise HTTPException(status_code=400,
@@ -393,8 +390,8 @@ async def detect_fraud(
         fpr_val   = float(fp / (fp + tn)) if (fp + tn) > 0 else 0.0
         fnr_val   = float(fn / (fn + tp)) if (fn + tp) > 0 else 0.0
 
-        print(f"  Precision:{precision*100:.2f}% Recall:{recall*100:.2f}% "
-              f"F1:{f1*100:.2f}% AUC:{auc*100:.2f}%")
+        print(f"  Precision:{precision*100:.2f}%  Recall:{recall*100:.2f}%  "
+              f"F1:{f1*100:.2f}%  AUC:{auc*100:.2f}%")
 
         charts = _generate_charts(y_true, final_preds, ensemble_probs, auc, f1, trainer)
 
@@ -502,7 +499,8 @@ def _generate_charts(y_true, final_preds, ensemble_probs, auc, f1, trainer):
     plt.figure(figsize=(8, 6))
     cm = sk_cm(y_true, final_preds)
     sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
-                xticklabels=["Normal","Fraud"], yticklabels=["Normal","Fraud"])
+                xticklabels=["Normal", "Fraud"],
+                yticklabels=["Normal", "Fraud"])
     plt.title("Confusion Matrix", fontweight="bold", fontsize=14)
     plt.ylabel("Actual"); plt.xlabel("Predicted")
     buf = BytesIO(); plt.savefig(buf, format="png", dpi=100, bbox_inches="tight")
@@ -514,7 +512,7 @@ def _generate_charts(y_true, final_preds, ensemble_probs, auc, f1, trainer):
     plt.figure(figsize=(8, 6))
     plt.plot(fpr_c, tpr_c, color="darkorange", lw=2,
              label=f"Three-Stage Hybrid (AUC = {auc:.4f})")
-    plt.plot([0,1],[0,1], "navy", lw=2, linestyle="--", label="Random Classifier")
+    plt.plot([0, 1], [0, 1], "navy", lw=2, linestyle="--", label="Random Classifier")
     plt.xlabel("False Positive Rate", fontsize=12)
     plt.ylabel("True Positive Rate", fontsize=12)
     plt.title("ROC Curve — Three-Stage Hybrid", fontweight="bold", fontsize=14)
@@ -558,16 +556,17 @@ def _generate_charts(y_true, final_preds, ensemble_probs, auc, f1, trainer):
     f1_val      = float(f1_score(y_true, final_preds, zero_division=0))
     acc_v       = float(accuracy_score(y_true, final_preds))
     mv          = [precision_v*100, recall_v*100, f1_val*100, acc_v*100, auc*100]
-    bar_colors  = ["#2ecc71" if v >= 99 else "#e67e22" if v >= 95 else "#e74c3c" for v in mv]
+    bar_colors  = ["#2ecc71" if v >= 99 else "#e67e22" if v >= 95 else "#e74c3c"
+                   for v in mv]
     plt.figure(figsize=(10, 6))
-    bars = plt.bar(["Precision","Recall","F1-Score","Accuracy","AUC-ROC"],
+    bars = plt.bar(["Precision", "Recall", "F1-Score", "Accuracy", "AUC-ROC"],
                    mv, color=bar_colors, alpha=0.9, edgecolor="black", linewidth=0.5)
     plt.axhline(y=99, color="red", linestyle="--", label="99% Target Line", linewidth=2)
     plt.ylim([0, 108]); plt.ylabel("Score (%)", fontsize=12)
     plt.title("Model Performance Metrics", fontweight="bold", fontsize=14)
     plt.legend()
     for bar, v in zip(bars, mv):
-        plt.text(bar.get_x() + bar.get_width()/2., bar.get_height() + 0.5,
+        plt.text(bar.get_x() + bar.get_width() / 2., bar.get_height() + 0.5,
                  f"{v:.2f}%", ha="center", va="bottom", fontweight="bold", fontsize=10)
     buf = BytesIO(); plt.savefig(buf, format="png", dpi=100, bbox_inches="tight")
     buf.seek(0); charts["metrics_comparison"] = base64.b64encode(buf.read()).decode()
