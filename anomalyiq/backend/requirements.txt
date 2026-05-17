@@ -12,4 +12,4 @@ joblib==1.4.2
 shap==0.45.1
 matplotlib==3.9.0
 seaborn==0.13.2
-starlette==0.40.0
+starlette==0.38.6
